@@ -1,0 +1,149 @@
+@page {
+  size: A4;
+  margin: 22mm 18mm 24mm;
+}
+
+:root {
+  --font-body: "Liberation Sans", "Carlito", "DejaVu Sans", sans-serif;
+  --font-heading: "Liberation Sans", "Carlito", "DejaVu Sans", sans-serif;
+  --color-text: #1e1f24;
+  --color-muted: #6b7280;
+  --color-accent: #111827;
+  --color-title: #760b1b;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  color: var(--color-text);
+  line-height: 1.6;
+  font-size: 14px;
+}
+
+.doc-header {
+  margin-bottom: 22px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.doc-title {
+  font-family: var(--font-heading);
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--color-accent);
+}
+
+.doc-subtitle {
+  font-size: 14px;
+  color: var(--color-muted);
+  margin-top: 6px;
+}
+
+.doc-body h1,
+.doc-body h2,
+.doc-body h3 {
+  font-family: var(--font-heading);
+  color: var(--color-title);
+  margin: 24px 0 8px;
+}
+
+.doc-body h1 {
+  margin-bottom: 22px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e5e7eb;
+  font-size: 22px;
+}
+
+.doc-body h2 {
+  font-size: 18px;
+}
+
+.doc-body h3 {
+  font-size: 16px;
+}
+
+.doc-body p {
+  margin: 0 0 12px;
+}
+
+.doc-body blockquote {
+  margin: 16px 0;
+  padding: 10px 14px;
+  border-left: 3px solid #cbd5f5;
+  background: #f8fafc;
+  color: #334155;
+  font-style: italic;
+}
+
+.doc-body blockquote p {
+  margin: 0 0 8px;
+}
+
+.doc-body blockquote p:last-child {
+  margin-bottom: 0;
+}
+
+.doc-body ul,
+.doc-body ol {
+  margin: 0 0 12px 20px;
+}
+
+.doc-body code {
+  font-family: "Liberation Mono", "DejaVu Sans Mono", monospace;
+  background: #f3f4f6;
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.doc-body pre {
+  background: #eaeef5;
+  color: #2a2b2c;
+  padding: 14px;
+  border-radius: 8px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  margin: 0 0 16px;
+}
+
+.doc-body pre code {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  display: block;
+  white-space: pre-wrap;
+}
+
+.doc-body table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12px 0 16px;
+  font-size: 13px;
+}
+
+.doc-body th,
+.doc-body td {
+  border: 1px solid #e5e7eb;
+  padding: 8px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.doc-body th {
+  background: #f3f4f6;
+}
+
+.doc-footer {
+  position: fixed;
+  bottom: 12mm;
+  left: 18mm;
+  right: 18mm;
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--color-muted);
+}
