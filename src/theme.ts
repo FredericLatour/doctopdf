@@ -1,22 +1,22 @@
-import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
 
 export interface ThemeAssets {
-  template: string;
-  css: string;
+  template: string
+  css: string
 }
 
 export async function loadTheme(theme: string): Promise<ThemeAssets> {
-  const themesDir = join(import.meta.dir, '..', 'themes');
-  const templatePath = join(themesDir, theme, 'template.html');
-  const cssPath = join(themesDir, theme, 'theme.css');
+  const themesDir = join(import.meta.dir, '..', 'themes')
+  const templatePath = join(themesDir, theme, 'template.html')
+  const cssPath = join(themesDir, theme, 'theme.css')
 
   const [template, css] = await Promise.all([
     readFile(templatePath, 'utf8'),
     readFile(cssPath, 'utf8'),
-  ]);
+  ])
 
-  return { template, css };
+  return { template, css }
 }
 
 export function applyTemplate(
@@ -24,23 +24,23 @@ export function applyTemplate(
   data: Record<string, unknown>,
   rawKeys = new Set<string>(),
 ): string {
-  let output = template;
+  let output = template
   if (Object.hasOwn(data, 'styles') && typeof data.styles === 'string') {
-    output = output.replaceAll('__STYLES__', data.styles);
+    output = output.replaceAll('__STYLES__', data.styles)
   }
 
-  return output.replace(/{{\s*([a-zA-Z0-9_.-]+)\s*}}/g, (match, key) => {
+  return output.replace(/{{\s*([a-zA-Z0-9_.-]+)\s*}}/g, (_match, key) => {
     if (!(key in data)) {
-      return '';
+      return ''
     }
 
-    const value = data[key];
-    const text = value == null ? '' : String(value);
+    const value = data[key]
+    const text = value == null ? '' : String(value)
     if (rawKeys.has(key)) {
-      return text;
+      return text
     }
-    return escapeHtml(text);
-  });
+    return escapeHtml(text)
+  })
 }
 
 function escapeHtml(value: string): string {
@@ -49,5 +49,5 @@ function escapeHtml(value: string): string {
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
+    .replaceAll("'", '&#39;')
 }

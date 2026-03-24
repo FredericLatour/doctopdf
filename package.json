@@ -6,12 +6,17 @@
   "scripts": {
     "dev": "bun run --watch src/index.ts",
     "start": "bun run src/index.ts",
-    "test": "bun test tests/unit tests/integration",
+    "format": "biome format --write .",
+    "format:check": "biome format .",
+    "lint": "biome lint .",
+    "check": "biome check .",
+    "test:fast": "bun test tests/unit tests/integration",
     "test:e2e": "bun test tests/e2e",
-    "test:all": "bun run test && bun run test:e2e",
+    "test:all": "bun run test:fast && bun run test:e2e",
     "fixtures:generate": "bun run tests/fixtures/generate-fixtures.ts"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.4.8",
     "@types/bun": "latest",
     "@types/markdown-it": "^14.1.2",
     "@types/node": "^25.0.2",

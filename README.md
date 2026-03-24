@@ -234,7 +234,7 @@ The repository includes three test layers:
 Run the fast suite:
 
 ```bash
-bun test
+bun run test:fast
 ```
 
 Run the Docker e2e suite:
@@ -248,6 +248,11 @@ Run everything:
 ```bash
 bun run test:all
 ```
+
+Note:
+
+- `bun test` is Bun's built-in test discovery command and will run all matching tests in the repository, including [`tests/e2e/`](/Users/frederic/devel/enesys/doctopdf/tests/e2e)
+- use `bun run test:fast` when you want only unit + integration tests
 
 Test fixtures live under [`tests/fixtures/`](/Users/frederic/devel/enesys/doctopdf/tests/fixtures). The `.docx` fixtures are generated from source XML in [`tests/fixtures/docx-src/`](/Users/frederic/devel/enesys/doctopdf/tests/fixtures/docx-src), so they can be reviewed and regenerated deterministically:
 
