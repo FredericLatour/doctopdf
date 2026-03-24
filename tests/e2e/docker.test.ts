@@ -178,4 +178,96 @@ describe('docker e2e', () => {
     expect(text).toContain('Zip Review')
     expect(text).toContain('Prepared for Acme')
   }, 120000)
+
+  test('render preserves document order in the merged pdf text', async () => {
+    const form = new FormData()
+    form.set(
+      'manifest',
+      JSON.stringify({
+        variables: {
+          title: 'DOCX-FIRST-MARKER',
+        },
+        outputName: 'ordered.pdf',
+        documents: [
+          { field: 'docxFirst', type: 'docx' },
+          { field: 'markdownSecond', type: 'markdown' },
+        ],
+      }),
+    )
+    form.set(
+      'docxFirst',
+      new File(
+        [await fixtureBytes('simple-template.docx')],
+        'simple-template.docx',
+      ),
+    )
+    form.set(
+      'markdownSecond',
+      new File(
+        [
+          '# MARKDOWN-SECOND-MARKER\n\nThis page should come after the DOCX page.\n',
+        ],
+        'ordered.md',
+        { type: 'text/markdown' },
+      ),
+    )
+
+    const response = await fetch(`http://127.0.0.1:${port}/render`, {
+      method: 'POST',
+      body: form,
+    })
+
+    expect(response.status).toBe(200)
+    const bytes = new Uint8Array(await response.arrayBuffer())
+    expect(await parsePdfPageCount(bytes)).toBeGreaterThanOrEqual(2)
+
+    const pdfPath = join(tempDir, 'ordered.pdf')
+    await writeFile(pdfPath, bytes)
+
+    const text = await extractTextWithContainer(pdfPath)
+    const docxIndex = text.indexOf('DOCX-FIRST-MARKER')
+    const markdownIndex = text.indexOf('MARKDOWN-SECOND-MARKER')
+
+    expect(docxIndex).toBeGreaterThanOrEqual(0)
+    expect(markdownIndex).toBeGreaterThanOrEqual(0)
+    expect(docxIndex).toBeLessThan(markdownIndex)
+  }, 120000)
+
+  test('render-zip returns 400 when a manifest file is missing from the archive', async () => {
+    const zipPath = join(tempDir, 'bundle-missing-member.zip')
+    await createZipFromFiles(
+      [{ source: 'multi-field-template.docx', pathInZip: 'docs/cover.docx' }],
+      zipPath,
+    )
+
+    const form = new FormData()
+    form.set(
+      'manifest',
+      JSON.stringify({
+        variables: {
+          title: 'Broken Zip Review',
+        },
+        documents: [
+          { file: 'docs/cover.docx', type: 'docx' },
+          { file: 'docs/missing.md', type: 'markdown' },
+        ],
+      }),
+    )
+    form.set(
+      'archive',
+      new File([await Bun.file(zipPath).arrayBuffer()], 'bundle.zip', {
+        type: 'application/zip',
+      }),
+    )
+
+    const response = await fetch(`http://127.0.0.1:${port}/render-zip`, {
+      method: 'POST',
+      body: form,
+    })
+
+    expect(response.status).toBe(400)
+    expect(await response.text()).toContain(
+      'Missing file "docs/missing.md" in zip archive',
+    )
+  }, 120000)
 })
