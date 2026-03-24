@@ -5,7 +5,11 @@
   "private": true,
   "scripts": {
     "dev": "bun run --watch src/index.ts",
-    "start": "bun run src/index.ts"
+    "start": "bun run src/index.ts",
+    "test": "bun test tests/unit tests/integration",
+    "test:e2e": "bun test tests/e2e",
+    "test:all": "bun run test && bun run test:e2e",
+    "fixtures:generate": "bun run tests/fixtures/generate-fixtures.ts"
   },
   "devDependencies": {
     "@types/bun": "latest",

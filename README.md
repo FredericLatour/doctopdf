@@ -223,6 +223,38 @@ For a production-style local run:
 bun start
 ```
 
+## Testing
+
+The repository includes three test layers:
+
+- unit tests for schema validation, filename handling, zip path safety, and DOCX templating
+- integration tests for the HTTP layer using injected fakes instead of LibreOffice and Chromium
+- Docker-backed end-to-end tests for the real rendering pipeline
+
+Run the fast suite:
+
+```bash
+bun test
+```
+
+Run the Docker e2e suite:
+
+```bash
+bun run test:e2e
+```
+
+Run everything:
+
+```bash
+bun run test:all
+```
+
+Test fixtures live under [`tests/fixtures/`](/Users/frederic/devel/enesys/doctopdf/tests/fixtures). The `.docx` fixtures are generated from source XML in [`tests/fixtures/docx-src/`](/Users/frederic/devel/enesys/doctopdf/tests/fixtures/docx-src), so they can be reviewed and regenerated deterministically:
+
+```bash
+bun run fixtures:generate
+```
+
 ## Docker
 
 The provided [`Dockerfile`](/Users/frederic/devel/enesys/doctopdf/Dockerfile) installs Bun, LibreOffice, Chromium, Poppler utilities, and baseline fonts.
