@@ -1,32 +1,53 @@
 # doctopdf
 
-Bun + Hono microservice that accepts multiple DOCX templates, fills `{variable}` placeholders, converts the filled documents to PDF via LibreOffice, merges them, and streams the combined PDF back in a single HTTP response.
+`doctopdf` is a Bun + Hono microservice that renders multiple source documents into a single merged PDF.
 
-## Local development
+It supports two input types:
 
-```bash
-bun install
-bun dev
+- DOCX templates rendered with `docxtemplater`
+- Markdown files rendered to themed HTML, then printed to PDF with Chromium
+
+The service accepts either individual multipart file uploads or a single zip archive, converts each document to PDF, merges the PDFs in manifest order, and streams the final file back in the response.
+
+## How it works
+
+1. The client sends a multipart request containing a JSON manifest plus document files.
+2. Each DOCX file is filled with manifest variables.
+3. Each Markdown file is expanded with manifest variables, injected into a theme, and rendered to PDF.
+4. LibreOffice converts DOCX outputs to PDF.
+5. The generated PDFs are merged with `pdf-lib`.
+6. The merged PDF is returned as `application/pdf`.
+
+## Endpoints
+
+### `GET /healthz`
+
+Simple health check:
+
+```json
+{ "status": "ok" }
 ```
 
-The server listens on `http://localhost:3000` by default. `PORT` overrides the port.
+### `POST /render`
 
-## API
+Accepts `multipart/form-data` with:
 
-`POST /render` (multipart/form-data)
+| Part | Type | Required | Description |
+| --- | --- | --- | --- |
+| `manifest` | JSON string or JSON file | yes | Rendering instructions. |
+| document parts | file uploads | yes | One file per manifest entry. The multipart field name must match `documents[].field`. |
 
-| Part | Type | Description |
-| --- | --- | --- |
-| `manifest` | JSON string or file | Describes the ordered documents, global variables, and optional theme name. |
-| Named document parts | DOCX file | Field name must match `field` in the manifest. |
-
-Manifest structure:
+Manifest shape:
 
 ```json
 {
-  "variables": { "title": "My title", "subtitle": "Monthly report" },
+  "variables": {
+    "title": "Monthly report",
+    "subtitle": "March 2026",
+    "customerName": "Acme"
+  },
   "theme": "default",
-  "outputName": "forecast.pdf",
+  "outputName": "report.pdf",
   "documents": [
     {
       "field": "cover",
@@ -34,96 +55,226 @@ Manifest structure:
       "filename": "cover.docx"
     },
     {
-      "field": "body",
-      "type": "markdown"
+      "field": "summary",
+      "type": "markdown",
+      "filename": "summary.pdf"
     }
   ]
 }
 ```
 
-Example request:
+Notes:
+
+- `documents` must contain at least one entry.
+- `type` can be `docx`, `markdown`, or `md`.
+- `filename` is optional. If omitted, the uploaded filename is used.
+- `outputName` defaults to `document.pdf`.
+- Files are merged in the order listed in `documents`.
+
+Example:
 
 ```bash
 curl -X POST http://localhost:3000/render \
-  -F 'manifest={"variables":{"title":"Great","subtitle":"Q1 recap"},"theme":"default","outputName":"forecast.pdf","documents":[{"field":"cover","type":"docx"},{"field":"body","type":"markdown"}]}' \
+  -F 'manifest={
+    "variables":{"title":"Quarterly Review","subtitle":"Q1 2026","customerName":"Acme"},
+    "theme":"default",
+    "outputName":"quarterly-review.pdf",
+    "documents":[
+      {"field":"cover","type":"docx"},
+      {"field":"summary","type":"markdown"}
+    ]
+  }' \
   -F 'cover=@./cover.docx' \
-  -F 'body=@./body.md' \
-  -o result.pdf
+  -F 'summary=@./summary.md' \
+  -o quarterly-review.pdf
 ```
 
-The response is `application/pdf` containing the merged output.
+### `POST /render-zip`
 
-`POST /render-zip` (multipart/form-data)
+Accepts `multipart/form-data` with:
 
-| Part | Type | Description |
-| --- | --- | --- |
-| `manifest` | JSON string or file | Describes the ordered documents, global variables, and optional theme name. |
-| `archive` | zip file | Zip archive containing all source files (DOCX/MD). |
+| Part | Type | Required | Description |
+| --- | --- | --- | --- |
+| `manifest` | JSON string or JSON file | yes | Rendering instructions. |
+| `archive` | zip file | yes | Zip archive containing the source documents. |
 
-Manifest structure (zip):
+Manifest shape:
 
 ```json
 {
-  "variables": { "title": "My title", "subtitle": "Monthly report" },
-  "theme": "default",
-  "outputName": "forecast.pdf",
+  "variables": {
+    "title": "Monthly report",
+    "subtitle": "March 2026"
+  },
+  "theme": "color",
+  "outputName": "report.pdf",
   "documents": [
     {
       "file": "cover.docx",
       "type": "docx"
     },
     {
-      "file": "body.md",
-      "type": "markdown"
+      "file": "sections/summary.md",
+      "type": "markdown",
+      "filename": "summary.pdf"
     }
   ]
 }
 ```
 
-`file` values must match the paths inside the zip archive.
+Notes:
 
-Example request:
+- `documents[].file` must match a path inside the zip archive.
+- Zip paths are normalized and rejected if they are absolute or contain `..`.
+- Files are extracted and rendered only if they are listed in the manifest.
+
+Example:
 
 ```bash
 curl -X POST http://localhost:3000/render-zip \
-  -F 'manifest={"variables":{"title":"Great","subtitle":"Q1 recap"},"theme":"default","outputName":"forecast.pdf","documents":[{"file":"cover.docx","type":"docx"},{"file":"body.md","type":"markdown"}]}' \
+  -F 'manifest={
+    "variables":{"title":"Quarterly Review","subtitle":"Q1 2026"},
+    "theme":"color",
+    "outputName":"quarterly-review.pdf",
+    "documents":[
+      {"file":"cover.docx","type":"docx"},
+      {"file":"summary.md","type":"markdown"}
+    ]
+  }' \
   -F 'archive=@./bundle.zip' \
-  -o result.pdf
+  -o quarterly-review.pdf
+```
+
+## Templating rules
+
+### DOCX templates
+
+DOCX files are rendered with `docxtemplater`. Use placeholders such as:
+
+```text
+{title}
+{customerName}
+```
+
+Values come from `manifest.variables`.
+
+### Markdown documents
+
+Markdown files support `{{variable}}` interpolation before Markdown is rendered:
+
+```md
+# {{title}}
+
+Prepared for {{customerName}}
+```
+
+Missing Markdown variables resolve to an empty string.
+
+## Themes
+
+Markdown documents are rendered through a theme stored under [`themes/`](/Users/frederic/devel/enesys/doctopdf/themes).
+
+Available themes in this repository:
+
+- `default`
+- `color`
+
+Each theme contains:
+
+- `template.html`: HTML wrapper
+- `theme.css`: CSS injected into the template
+
+Theme template conventions:
+
+- `{{content}}` is replaced with rendered Markdown HTML
+- `__STYLES__` is replaced with the theme CSS
+- other `{{...}}` placeholders are resolved from `manifest.variables`
+
+If a referenced theme directory does not exist, rendering fails.
+
+## Local development
+
+### Prerequisites
+
+To run outside Docker, the host machine needs:
+
+- Bun
+- LibreOffice with `soffice` available on `PATH`
+- Chromium or another compatible Chromium binary
+
+The service uses:
+
+- LibreOffice for DOCX -> PDF conversion
+- Playwright Core + Chromium for Markdown -> PDF rendering
+- `pdf-lib` for PDF merging
+
+### Start the service
+
+```bash
+bun install
+bun dev
+```
+
+The server listens on `http://localhost:3000` by default.
+
+For a production-style local run:
+
+```bash
+bun start
 ```
 
 ## Docker
 
-Build and run the containerized service (LibreOffice + Bun included):
+The provided [`Dockerfile`](/Users/frederic/devel/enesys/doctopdf/Dockerfile) installs Bun, LibreOffice, Chromium, Poppler utilities, and baseline fonts.
+
+Build and run:
 
 ```bash
 docker build -t doctopdf .
-docker run -p 3000:3000 -e PORT=3000 doctopdf
+docker run --rm -p 3000:3000 -e PORT=3000 doctopdf
 ```
 
-## Themes
+The container sets `CHROMIUM_PATH=/usr/bin/chromium`.
 
-Markdown documents are rendered through a theme (HTML + CSS). Built-in themes live under `themes/` (`default`, `studio`). The default theme uses `{{content}}` for the rendered Markdown HTML, `__STYLES__` inside the `<style>` tag, and accepts variables like `{{title}}`, `{{subtitle}}`, `{{footerLeft}}`, and `{{footerRight}}`.
+## Fonts
 
-Sample Markdown file: `data/markdown-kitchen-sink.md`.
+The Docker image includes:
 
-## Environment variables (optional)
+- DejaVu
+- Liberation
+- Carlito
+
+Custom fonts can be added by placing `.ttf` or `.otf` files in [`fonts/`](/Users/frederic/devel/enesys/doctopdf/fonts) before building the image. They are copied into `/usr/local/share/fonts/custom` and cached during the image build.
+
+## Configuration
+
+Optional environment variables:
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `PORT` | `3000` | HTTP port for the service. |
-| `CHROMIUM_PATH` | `/usr/bin/chromium` (Docker) | Override Chromium binary path. |
-| `MARKDOWN_TIMEOUT_MS` | `30000` | Timeout for Markdown HTML render and PDF generation. |
-| `MARKDOWN_WAIT_UNTIL` | `domcontentloaded` | `load`, `domcontentloaded`, or `networkidle` for HTML render wait condition. |
-| `MARKDOWN_IDLE_MS` | unset | If set, auto-close the shared Chromium after N ms of inactivity. |
-| `MARKDOWN_CLOSE_TIMEOUT_MS` | `5000` | Timeout for shutting down Chromium cleanly. |
-| `MARKDOWN_DEBUG` | unset | Set to `1` to log each Markdown rendering phase. |
-| `MARKDOWN_MAX_CHARS` | unset | Hard cap for Markdown input length. |
+| `PORT` | `3000` | HTTP port. |
+| `CHROMIUM_PATH` | unset locally, `/usr/bin/chromium` in Docker | Override the Chromium executable path. |
 | `FORMDATA_TIMEOUT_MS` | `30000` | Timeout for multipart parsing. |
-| `MERGE_TIMEOUT_MS` | `30000` | Timeout for PDF merge steps. |
+| `MARKDOWN_TIMEOUT_MS` | `30000` | Timeout for Markdown HTML rendering and PDF generation. |
+| `MARKDOWN_WAIT_UNTIL` | `domcontentloaded` | Playwright wait condition: `load`, `domcontentloaded`, or `networkidle`. |
+| `MARKDOWN_IDLE_MS` | unset | Idle timeout before the shared Chromium instance is closed. |
+| `MARKDOWN_CLOSE_TIMEOUT_MS` | `5000` | Timeout for closing Chromium cleanly. |
+| `MARKDOWN_DEBUG` | unset | Set to `1` to log Markdown rendering phases. |
+| `MARKDOWN_MAX_CHARS` | unset | Reject Markdown input longer than this value. |
+| `MERGE_TIMEOUT_MS` | `30000` | Timeout for PDF merge work. |
 
-## Requirements
+## Error behavior
 
-- LibreOffice (already bundled in the Dockerfile; install locally if you run without Docker)
-- Liberation, DejaVu, and Carlito font families ship in the Docker image to provide sans-serif coverage (Carlito is metrically compatible with Calibri). Drop additional `.ttf/.otf` files into the `fonts/` directory before building—or mount them into `/usr/local/share/fonts` at runtime—and LibreOffice will use them after `fc-cache -f -v`.
-- Chromium is installed for Markdown → PDF rendering. You can override the binary location with `CHROMIUM_PATH`.
-- `pdf-lib` handles PDF merging inside the application, so no extra merge utilities are needed.
+Common request failures include:
+
+- missing `manifest`
+- missing required file parts
+- invalid JSON manifest
+- empty `documents` array
+- DOCX template rendering errors
+- LibreOffice conversion failures
+- missing files inside zip archives
+- invalid zip paths
+- Markdown rendering or Chromium failures
+
+Client-side input problems generally return `400`. Unexpected internal failures return `500`.
