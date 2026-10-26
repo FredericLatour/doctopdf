@@ -3,6 +3,8 @@
   "module": "src/index.ts",
   "type": "module",
   "private": true,
+  "version": "1.0.0",
+  "packageManager": "bun@1.4.4",
   "scripts": {
     "dev": "bun run --watch src/index.ts",
     "start": "bun run src/index.ts",
@@ -10,6 +12,7 @@
     "format:check": "biome format .",
     "lint": "biome lint .",
     "check": "biome check .",
+    "typecheck": "tsc --noEmit",
     "test:fast": "bun test tests/unit tests/integration",
     "test:e2e": "bun test tests/e2e",
     "test:all": "bun run test:fast && bun run test:e2e",
@@ -17,22 +20,22 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.8",
-    "@types/bun": "latest",
+    "@types/bun": "^1.4.4",
     "@types/markdown-it": "^14.1.2",
     "@types/node": "^25.0.2",
     "@types/yauzl": "^2.10.3"
   },
   "peerDependencies": {
-    "typescript": "^5"
+    "typescript": "^6"
   },
   "dependencies": {
     "docxtemplater": "^3.67.6",
-    "hono": "^4.11.1",
-    "markdown-it": "^14.1.0",
+    "hono": "^4.13.13",
+    "markdown-it": "^14.3.3",
     "pdf-lib": "^1.17.1",
     "pizzip": "^3.2.0",
     "playwright-core": "^1.57.0",
-    "yauzl": "^3.2.0",
-    "zod": "^3.25.6"
+    "yauzl": "^3.4.0",
+    "zod": "^4.6.7"
   }
 }

@@ -42,6 +42,47 @@ describe('http service', () => {
     expect(await response.json()).toEqual({ status: 'ok' })
   })
 
+  for (const { endpoint, document } of [
+    { endpoint: '/render', document: { field: 'cover' } },
+    { endpoint: '/render-zip', document: { file: 'cover.docx' } },
+  ]) {
+    test(`${endpoint} returns 400 for invalid template variables`, async () => {
+      const app = createApp(makeDependencies())
+      const form = new FormData()
+      form.set(
+        'manifest',
+        JSON.stringify({ variables: [], documents: [document] }),
+      )
+      form.set('archive', new File([], 'bundle.zip'))
+
+      const response = await app.request(endpoint, {
+        method: 'POST',
+        body: form,
+      })
+
+      expect(response.status).toBe(400)
+      const issues = JSON.parse(await response.text())
+      expect(issues[0].path).toEqual(['variables'])
+    })
+
+    test(`${endpoint} returns 400 for an empty document list`, async () => {
+      const app = createApp(makeDependencies())
+      const form = new FormData()
+      form.set('manifest', JSON.stringify({ documents: [] }))
+      form.set('archive', new File([], 'bundle.zip'))
+
+      const response = await app.request(endpoint, {
+        method: 'POST',
+        body: form,
+      })
+
+      expect(response.status).toBe(400)
+      expect(await response.text()).toContain(
+        'At least one document must be provided for rendering',
+      )
+    })
+  }
+
   test('render merges docx and markdown inputs', async () => {
     const app = createApp(makeDependencies())
     const form = new FormData()

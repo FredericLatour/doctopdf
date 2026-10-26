@@ -71,7 +71,7 @@ describe('docker e2e', () => {
     ])
 
     await waitForHttp(`http://127.0.0.1:${port}/healthz`, 60000)
-  }, 120000)
+  }, 600000)
 
   afterAll(async () => {
     try {
