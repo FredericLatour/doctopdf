@@ -1,33 +1,35 @@
 import { z } from 'zod'
 
 export const DocumentDescriptorSchema = z.object({
-  field: z.string().min(1, 'Each document requires a unique field name'),
+  field: z
+    .string()
+    .min(1, { error: 'Each document requires a unique field name' }),
   filename: z.string().optional(),
   type: z.enum(['docx', 'markdown', 'md']).default('docx'),
 })
 
 export const RenderRequestSchema = z.object({
-  variables: z.record(z.any()).default({}),
+  variables: z.record(z.string(), z.unknown()).default({}),
   theme: z.string().default('default'),
   outputName: z.string().optional(),
   documents: z
     .array(DocumentDescriptorSchema)
-    .nonempty('At least one document must be provided for rendering'),
+    .min(1, { error: 'At least one document must be provided for rendering' }),
 })
 
 export const ZipDocumentDescriptorSchema = z.object({
-  file: z.string().min(1, 'Each document requires a zip file path'),
+  file: z.string().min(1, { error: 'Each document requires a zip file path' }),
   filename: z.string().optional(),
   type: z.enum(['docx', 'markdown', 'md']).default('docx'),
 })
 
 export const RenderZipRequestSchema = z.object({
-  variables: z.record(z.any()).default({}),
+  variables: z.record(z.string(), z.unknown()).default({}),
   theme: z.string().default('default'),
   outputName: z.string().optional(),
   documents: z
     .array(ZipDocumentDescriptorSchema)
-    .nonempty('At least one document must be provided for rendering'),
+    .min(1, { error: 'At least one document must be provided for rendering' }),
 })
 
 export type DocumentDescriptor = z.infer<typeof DocumentDescriptorSchema>

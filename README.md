@@ -198,7 +198,7 @@ If a referenced theme directory does not exist, rendering fails.
 
 To run outside Docker, the host machine needs:
 
-- Bun
+- Bun 1.4.4 (also pinned in `package.json` and the Docker image)
 - LibreOffice with `soffice` available on `PATH`
 - Chromium or another compatible Chromium binary
 
@@ -224,6 +224,13 @@ bun start
 ```
 
 ## Testing
+
+Run formatting, lint, and type checks:
+
+```bash
+bun run check
+bun run typecheck
+```
 
 The repository includes three test layers:
 
