@@ -1,12 +1,15 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { mkdtemp, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import PizZip from 'pizzip'
 
 import {
   cleanupDir,
   createZipFromFiles,
+  docxWithDelimiters,
   fixtureBytes,
   fixtureText,
+  getFreePort,
   parsePdfPageCount,
   repoRoot,
   waitForHttp,
@@ -37,17 +40,20 @@ async function runDocker(args: string[]) {
   return stdout.trim()
 }
 
-async function extractTextWithContainer(pdfPath: string) {
+async function extractTextWithContainer(
+  pdfPath: string,
+  targetContainer = containerName,
+) {
   const fileName = pdfPath.split('/').at(-1)
   if (!fileName) {
     throw new Error(`Invalid pdf path: ${pdfPath}`)
   }
 
   const containerPath = `/tmp/${fileName}`
-  await runDocker(['cp', pdfPath, `${containerName}:${containerPath}`])
+  await runDocker(['cp', pdfPath, `${targetContainer}:${containerPath}`])
   return await runDocker([
     'exec',
-    containerName,
+    targetContainer,
     'pdftotext',
     containerPath,
     '-',
@@ -268,6 +274,124 @@ describe('docker e2e', () => {
     expect(response.status).toBe(400)
     expect(await response.text()).toContain(
       'Missing file "docs/missing.md" in zip archive',
+    )
+  }, 120000)
+
+  test('environment and document delimiters render through the real pipeline for both endpoints', async () => {
+    const configuredContainer = `${containerName}-delimiters`
+    const configuredPort = await getFreePort()
+    await runDocker([
+      'run',
+      '--detach',
+      '--rm',
+      '--name',
+      configuredContainer,
+      '-p',
+      `${configuredPort}:3000`,
+      '-e',
+      'DOCX_DELIMITER_START=[',
+      '-e',
+      'DOCX_DELIMITER_END=]',
+      '-e',
+      'MARKDOWN_DELIMITER_START=[[',
+      '-e',
+      'MARKDOWN_DELIMITER_END=]]',
+      imageTag,
+    ])
+
+    try {
+      await waitForHttp(`http://127.0.0.1:${configuredPort}/healthz`, 60000)
+      const files = [
+        {
+          name: 'environment.docx',
+          type: 'docx',
+          bytes: await docxWithDelimiters({ start: '[', end: ']' }),
+        },
+        {
+          name: 'override.docx',
+          type: 'docx',
+          bytes: await fixtureBytes('simple-template.docx'),
+          delimiters: { start: '{', end: '}' },
+        },
+        {
+          name: 'environment.md',
+          type: 'markdown',
+          bytes: new TextEncoder().encode('# [[customerName]]'),
+        },
+        {
+          name: 'override.md',
+          type: 'md',
+          bytes: new TextEncoder().encode('# {subtitle}'),
+          delimiters: { start: '{', end: '}' },
+        },
+      ]
+
+      for (const endpoint of ['/render', '/render-zip']) {
+        const form = new FormData()
+        form.set(
+          'manifest',
+          JSON.stringify({
+            variables: {
+              title: 'E2E-CONFIGURED-TITLE',
+              customerName: 'MD-ENV-MARKER',
+              subtitle: 'MD-OVERRIDE-MARKER',
+            },
+            documents: files.map((file, index) => ({
+              ...(endpoint === '/render'
+                ? { field: `document${index}` }
+                : { file: `docs/${file.name}` }),
+              type: file.type,
+              delimiters: file.delimiters,
+            })),
+          }),
+        )
+        if (endpoint === '/render') {
+          for (const [index, file] of files.entries()) {
+            form.set(`document${index}`, new File([file.bytes], file.name))
+          }
+        } else {
+          const zip = new PizZip()
+          for (const file of files) {
+            zip.file(`docs/${file.name}`, file.bytes)
+          }
+          form.set(
+            'archive',
+            new File([zip.generate({ type: 'arraybuffer' })], 'bundle.zip'),
+          )
+        }
+
+        const response = await fetch(
+          `http://127.0.0.1:${configuredPort}${endpoint}`,
+          { method: 'POST', body: form },
+        )
+        expect(response.status).toBe(200)
+        const bytes = new Uint8Array(await response.arrayBuffer())
+        expect(await parsePdfPageCount(bytes)).toBeGreaterThanOrEqual(4)
+        const pdfPath = join(tempDir, `configured-${endpoint.slice(1)}.pdf`)
+        await writeFile(pdfPath, bytes)
+        const text = await extractTextWithContainer(
+          pdfPath,
+          configuredContainer,
+        )
+
+        expect(text.match(/E2E-CONFIGURED-TITLE/g)).toHaveLength(2)
+        expect(text).toContain('MD-ENV-MARKER')
+        expect(text).toContain('MD-OVERRIDE-MARKER')
+        expect(text).not.toContain('{title}')
+        expect(text).not.toContain('[title]')
+        expect(text).not.toContain('[[customerName]]')
+        expect(text).not.toContain('{subtitle}')
+      }
+    } finally {
+      await runDocker(['rm', '-f', configuredContainer])
+    }
+  }, 120000)
+
+  test('incomplete environment delimiters stop the service at startup', async () => {
+    await expect(
+      runDocker(['run', '--rm', '-e', 'DOCX_DELIMITER_START=[[', imageTag]),
+    ).rejects.toThrow(
+      'DOCX_DELIMITER_START and DOCX_DELIMITER_END must both be set to nonempty strings',
     )
   }, 120000)
 })

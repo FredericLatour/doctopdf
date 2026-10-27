@@ -4,6 +4,9 @@ import { tmpdir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 
 import { PDFDocument, StandardFonts } from 'pdf-lib'
+import PizZip from 'pizzip'
+
+import type { Delimiters } from '../src/types'
 
 export const repoRoot = resolve(import.meta.dir, '..')
 export const fixturesDir = join(repoRoot, 'tests', 'fixtures')
@@ -55,6 +58,24 @@ export async function fixtureBytes(name: string) {
 
 export async function fixtureText(name: string) {
   return await fixtureFile(name).text()
+}
+
+export async function docxWithDelimiters(delimiters: Delimiters) {
+  const zip = new PizZip(await fixtureBytes('simple-template.docx'))
+  const xml = zip.file('word/document.xml')?.asText()
+  if (!xml) {
+    throw new Error('Missing document XML in the DOCX fixture')
+  }
+
+  const placeholder = `${delimiters.start}title${delimiters.end}`
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+  zip.file(
+    'word/document.xml',
+    xml.replaceAll('{title}', () => placeholder),
+  )
+  return new Uint8Array(zip.generate({ type: 'arraybuffer' }))
 }
 
 export async function createZipFromFiles(

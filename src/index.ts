@@ -6,6 +6,11 @@ import { join } from 'node:path'
 import { Hono } from 'hono'
 import { HTTPException } from 'hono/http-exception'
 
+import {
+  type DelimiterDefaults,
+  loadDelimiterDefaults,
+  resolveDocumentDelimiters,
+} from './delimiters'
 import { convertDocxToPdf } from './libreoffice'
 import { renderMarkdownToPdf } from './markdown'
 import { mergePdfFiles } from './pdf'
@@ -39,7 +44,15 @@ const defaultDependencies: AppDependencies = {
   extractZipFiles,
 }
 
-export function createApp(deps: AppDependencies = defaultDependencies) {
+export interface AppOptions {
+  delimiterDefaults?: DelimiterDefaults
+}
+
+export function createApp(
+  deps: AppDependencies = defaultDependencies,
+  options: AppOptions = {},
+) {
+  const delimiterDefaults = options.delimiterDefaults ?? loadDelimiterDefaults()
   const app = new Hono()
 
   app.get('/healthz', (c) => c.json({ status: 'ok' }))
@@ -91,6 +104,7 @@ export function createApp(deps: AppDependencies = defaultDependencies) {
 
     try {
       for (const [index, spec] of parsed.data.documents.entries()) {
+        const delimiters = resolveDocumentDelimiters(spec, delimiterDefaults)
         const startedAt = Date.now()
         console.info(
           `[${new Date().toISOString()}] [request:${requestId}] [render] start ${index + 1}/${parsed.data.documents.length} ${spec.type}:${spec.field}`,
@@ -113,6 +127,7 @@ export function createApp(deps: AppDependencies = defaultDependencies) {
               {
                 label: `${spec.field}:${requestId}`,
                 timeoutMs: markdownTimeoutMs,
+                delimiters,
               },
             )
           } catch (error) {
@@ -137,7 +152,9 @@ export function createApp(deps: AppDependencies = defaultDependencies) {
 
           let renderedBuffer: Buffer
           try {
-            renderedBuffer = deps.fillTemplate(sourceBuffer, globalVariables)
+            renderedBuffer = deps.fillTemplate(sourceBuffer, globalVariables, {
+              delimiters,
+            })
           } catch (error) {
             throw new HTTPException(400, {
               message: `Template rendering failed for field "${spec.field}"`,
@@ -245,6 +262,7 @@ export function createApp(deps: AppDependencies = defaultDependencies) {
       const { files } = await deps.extractZipFiles(archiveBuffer, wantedFiles)
 
       for (const [index, spec] of parsed.data.documents.entries()) {
+        const delimiters = resolveDocumentDelimiters(spec, delimiterDefaults)
         const startedAt = Date.now()
         console.info(
           `[${new Date().toISOString()}] [request:${requestId}] [render] start ${index + 1}/${parsed.data.documents.length} ${spec.type}:${spec.file}`,
@@ -274,6 +292,7 @@ export function createApp(deps: AppDependencies = defaultDependencies) {
               {
                 label: `${spec.file}:${requestId}`,
                 timeoutMs: markdownTimeoutMs,
+                delimiters,
               },
             )
           } catch (error) {
@@ -296,7 +315,9 @@ export function createApp(deps: AppDependencies = defaultDependencies) {
         } else {
           let renderedBuffer: Buffer
           try {
-            renderedBuffer = deps.fillTemplate(fileBuffer, globalVariables)
+            renderedBuffer = deps.fillTemplate(fileBuffer, globalVariables, {
+              delimiters,
+            })
           } catch (error) {
             throw new HTTPException(400, {
               message: `Template rendering failed for file "${spec.file}"`,

@@ -74,6 +74,39 @@ for (const { name, schema, document, reference, referenceError } of [
       }
     })
 
+    test('accepts a complete document delimiter pair', () => {
+      const parsed = schema.parse({
+        documents: [{ ...document, delimiters: { start: '[[', end: ']]' } }],
+      })
+
+      expect(parsed.documents[0]?.delimiters).toEqual({
+        start: '[[',
+        end: ']]',
+      })
+    })
+
+    test.each([
+      ['missing start', { end: ']]' }],
+      ['missing end', { start: '[[' }],
+      ['empty start', { start: '', end: ']]' }],
+      ['empty end', { start: '[[', end: '' }],
+      ['non-string start', { start: 42, end: ']]' }],
+      ['non-string end', { start: '[[', end: 42 }],
+      ['null', null],
+      ['empty object', {}],
+    ])('rejects delimiter configuration with %s', (_name, delimiters) => {
+      const result = schema.safeParse({
+        documents: [{ ...document, delimiters }],
+      })
+
+      expect(result.success).toBe(false)
+      expect(result.error?.issues[0]?.path.slice(0, 3)).toEqual([
+        'documents',
+        0,
+        'delimiters',
+      ])
+    })
+
     test('rejects an empty document list with the existing message', () => {
       const result = schema.safeParse({ documents: [] })
 

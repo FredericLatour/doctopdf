@@ -1,7 +1,9 @@
 import MarkdownIt from 'markdown-it'
 import { type Browser, chromium } from 'playwright-core'
 
+import { DEFAULT_DELIMITERS } from './delimiters'
 import { applyTemplate, loadTheme } from './theme'
+import type { Delimiters } from './types'
 
 let sharedBrowser: Browser | null = null
 let sharedLastUsedAt = 0
@@ -14,19 +16,23 @@ const markdown = new MarkdownIt({
   typographer: true,
 })
 
-export interface MarkdownRenderOptions {
+export interface MarkdownTemplateOptions {
   label?: string
+  delimiters?: Delimiters
+}
+
+export interface MarkdownRenderOptions extends MarkdownTemplateOptions {
   browser?: Browser
   timeoutMs?: number
   waitUntil?: WaitUntilOption
 }
 
-export async function renderMarkdownToPdf(
+export async function renderMarkdownToHtml(
   markdownInput: string,
   variables: Record<string, unknown>,
   theme: string,
-  options: MarkdownRenderOptions = {},
-): Promise<Uint8Array> {
+  options: MarkdownTemplateOptions = {},
+): Promise<string> {
   const log = createLogger(options.label)
   const maxChars = Number(process.env.MARKDOWN_MAX_CHARS ?? 0)
   if (maxChars > 0 && markdownInput.length > maxChars) {
@@ -38,12 +44,16 @@ export async function renderMarkdownToPdf(
   const { template, css } = await loadTheme(theme)
   log('expand markdown')
   const expandedMarkdown = normalizeMarkdown(
-    interpolateMarkdown(markdownInput, variables),
+    interpolateMarkdown(
+      markdownInput,
+      variables,
+      options.delimiters ?? DEFAULT_DELIMITERS.markdown,
+    ),
   )
   log('render markdown')
   const content = markdown.render(expandedMarkdown)
 
-  const html = applyTemplate(
+  return applyTemplate(
     template,
     {
       ...variables,
@@ -51,6 +61,21 @@ export async function renderMarkdownToPdf(
       styles: css,
     },
     new Set(['content', 'styles']),
+  )
+}
+
+export async function renderMarkdownToPdf(
+  markdownInput: string,
+  variables: Record<string, unknown>,
+  theme: string,
+  options: MarkdownRenderOptions = {},
+): Promise<Uint8Array> {
+  const log = createLogger(options.label)
+  const html = await renderMarkdownToHtml(
+    markdownInput,
+    variables,
+    theme,
+    options,
   )
 
   const timeoutMs =
@@ -90,8 +115,13 @@ export async function renderMarkdownToPdf(
 function interpolateMarkdown(
   input: string,
   variables: Record<string, unknown>,
+  delimiters: Delimiters,
 ): string {
-  return input.replace(/{{\s*([a-zA-Z0-9_.-]+)\s*}}/g, (_, key) => {
+  const pattern = new RegExp(
+    `${RegExp.escape(delimiters.start)}\\s*([a-zA-Z0-9_.-]+?)\\s*${RegExp.escape(delimiters.end)}`,
+    'g',
+  )
+  return input.replace(pattern, (_, key: string) => {
     if (!(key in variables)) {
       return ''
     }

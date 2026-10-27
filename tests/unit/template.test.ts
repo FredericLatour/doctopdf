@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import PizZip from 'pizzip'
 
 import { fillTemplate } from '../../src/template'
-import { fixtureBytes } from '../helpers'
+import { docxWithDelimiters, fixtureBytes } from '../helpers'
 
 describe('fillTemplate', () => {
   test('renders the simple docx fixture', async () => {
@@ -30,5 +30,41 @@ describe('fillTemplate', () => {
     expect(documentXml).toContain('Quarterly Review')
     expect(documentXml).toContain('Q1 2026')
     expect(documentXml).toContain('Prepared for Acme')
+  })
+
+  test.each([
+    { start: '[[', end: ']]' },
+    { start: '<%', end: '%>' },
+    { start: '$^(', end: ')|*' },
+  ])('renders custom delimiters %j using the native DOCX parser', async (delimiters) => {
+    const input = Buffer.from(await docxWithDelimiters(delimiters))
+    const output = fillTemplate(
+      input,
+      { title: 'Custom DOCX Review' },
+      { delimiters },
+    )
+    const xml = new PizZip(output).file('word/document.xml')?.asText()
+
+    expect(xml).toContain('Custom DOCX Review')
+    expect(xml).not.toContain(`${delimiters.start}title${delimiters.end}`)
+  })
+
+  test('custom delimiters do not change the defaults for later documents', async () => {
+    const custom = { start: '[[', end: ']]' }
+    fillTemplate(
+      Buffer.from(await docxWithDelimiters(custom)),
+      { title: 'First' },
+      {
+        delimiters: custom,
+      },
+    )
+    const output = fillTemplate(
+      Buffer.from(await fixtureBytes('simple-template.docx')),
+      { title: 'Default still works' },
+    )
+
+    expect(new PizZip(output).file('word/document.xml')?.asText()).toContain(
+      'Default still works',
+    )
   })
 })
