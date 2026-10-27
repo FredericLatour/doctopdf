@@ -1,11 +1,21 @@
 import { z } from 'zod'
 
+export const DelimitersSchema = z.object({
+  start: z.string().min(1, { error: 'Opening delimiter must not be empty' }),
+  end: z.string().min(1, { error: 'Closing delimiter must not be empty' }),
+})
+
+const documentOptions = {
+  filename: z.string().optional(),
+  type: z.enum(['docx', 'markdown', 'md']).default('docx'),
+  delimiters: DelimitersSchema.optional(),
+}
+
 export const DocumentDescriptorSchema = z.object({
   field: z
     .string()
     .min(1, { error: 'Each document requires a unique field name' }),
-  filename: z.string().optional(),
-  type: z.enum(['docx', 'markdown', 'md']).default('docx'),
+  ...documentOptions,
 })
 
 export const RenderRequestSchema = z.object({
@@ -19,8 +29,7 @@ export const RenderRequestSchema = z.object({
 
 export const ZipDocumentDescriptorSchema = z.object({
   file: z.string().min(1, { error: 'Each document requires a zip file path' }),
-  filename: z.string().optional(),
-  type: z.enum(['docx', 'markdown', 'md']).default('docx'),
+  ...documentOptions,
 })
 
 export const RenderZipRequestSchema = z.object({
@@ -32,6 +41,7 @@ export const RenderZipRequestSchema = z.object({
     .min(1, { error: 'At least one document must be provided for rendering' }),
 })
 
+export type Delimiters = z.infer<typeof DelimitersSchema>
 export type DocumentDescriptor = z.infer<typeof DocumentDescriptorSchema>
 export type RenderRequest = z.infer<typeof RenderRequestSchema>
 export type ZipDocumentDescriptor = z.infer<typeof ZipDocumentDescriptorSchema>

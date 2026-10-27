@@ -70,6 +70,7 @@ Notes:
 - `filename` is optional. If omitted, the uploaded filename is used.
 - `outputName` defaults to `document.pdf`.
 - Files are merged in the order listed in `documents`.
+- `documents[].delimiters` can override the placeholder syntax for one document; see [Custom delimiters](#custom-delimiters).
 
 Example:
 
@@ -127,6 +128,7 @@ Notes:
 - `documents[].file` must match a path inside the zip archive.
 - Zip paths are normalized and rejected if they are absolute or contain `..`.
 - Files are extracted and rendered only if they are listed in the manifest.
+- Each document can set `delimiters` in the same way as individual uploads; see [Custom delimiters](#custom-delimiters).
 
 Example:
 
@@ -149,7 +151,7 @@ curl -X POST http://localhost:3000/render-zip \
 
 ### DOCX templates
 
-DOCX files are rendered with `docxtemplater`. Use placeholders such as:
+DOCX files are rendered with `docxtemplater`. By default, use placeholders such as:
 
 ```text
 {title}
@@ -160,7 +162,7 @@ Values come from `manifest.variables`.
 
 ### Markdown documents
 
-Markdown files support `{{variable}}` interpolation before Markdown is rendered:
+By default, Markdown files use `{{variable}}` interpolation before Markdown is rendered:
 
 ```md
 # {{title}}
@@ -169,6 +171,65 @@ Prepared for {{customerName}}
 ```
 
 Missing Markdown variables resolve to an empty string.
+
+### Custom delimiters
+
+DOCX and Markdown placeholder delimiters are configurable independently. The effective pair for each document is selected in this order, with later settings taking priority:
+
+1. Built-in defaults: `{` / `}` for DOCX, `{{` / `}}` for Markdown.
+2. Environment settings for that format, including variables loaded from `.env`.
+3. The document's optional `delimiters` object in the manifest.
+
+The `md` alias uses the same settings as `markdown`. An override applies to that document only; one request can combine different placeholder conventions.
+
+For example, set these environment variables to use `[title]` in DOCX and `[[title]]` in Markdown:
+
+```dotenv
+DOCX_DELIMITER_START="["
+DOCX_DELIMITER_END="]"
+MARKDOWN_DELIMITER_START="[["
+MARKDOWN_DELIMITER_END="]]"
+```
+
+Bun loads `.env` files automatically when running locally. For container deployments, supply these values through the container's environment. Environment defaults are read when the application starts, so restart the service after changing them.
+
+Both environment variables for a format must be set together to nonempty strings. An incomplete or empty environment pair prevents startup and reports the variable names. Leave both variables unset to keep that format's built-in defaults.
+
+To choose delimiters for individual uploads, add `delimiters` to a document entry:
+
+```json
+{
+  "variables": { "title": "Quarterly Review" },
+  "documents": [
+    {
+      "field": "cover",
+      "type": "docx",
+      "delimiters": { "start": "{", "end": "}" }
+    },
+    {
+      "field": "summary",
+      "type": "markdown",
+      "delimiters": { "start": "<%", "end": "%>" }
+    }
+  ]
+}
+```
+
+Here the DOCX template uses `{title}` and the Markdown file uses `<%title%>`, regardless of environment defaults. Omitting `delimiters` inherits the configured defaults for the document's format.
+
+ZIP manifests accept the same option on entries identified by `file`, for example:
+
+```json
+{
+  "file": "sections/summary.md",
+  "type": "md",
+  "delimiters": { "start": "<%", "end": "%>" }
+}
+```
+
+A document override must supply both `start` and `end` as nonempty strings; invalid overrides return `400`. Delimiters are matched literally, including regex punctuation. Markdown expansion still occurs before parsing, including inside code spans and fenced code blocks.
+
+HTML theme markers keep their existing syntax: `{{content}}`, `{{title}}`, other `{{...}}` placeholders, and `__STYLES__` are independent of document delimiter settings.
 
 ## Themes
 
@@ -298,6 +359,10 @@ Optional environment variables:
 | --- | --- | --- |
 | `PORT` | `3000` | HTTP port. |
 | `CHROMIUM_PATH` | unset locally, `/usr/bin/chromium` in Docker | Override the Chromium executable path. |
+| `DOCX_DELIMITER_START` | unset (uses `{`) | Opening DOCX delimiter; set together with `DOCX_DELIMITER_END`. |
+| `DOCX_DELIMITER_END` | unset (uses `}`) | Closing DOCX delimiter; set together with `DOCX_DELIMITER_START`. |
+| `MARKDOWN_DELIMITER_START` | unset (uses `{{`) | Opening Markdown delimiter; set together with `MARKDOWN_DELIMITER_END`. |
+| `MARKDOWN_DELIMITER_END` | unset (uses `}}`) | Closing Markdown delimiter; set together with `MARKDOWN_DELIMITER_START`. |
 | `FORMDATA_TIMEOUT_MS` | `30000` | Timeout for multipart parsing. |
 | `MARKDOWN_TIMEOUT_MS` | `30000` | Timeout for Markdown HTML rendering and PDF generation. |
 | `MARKDOWN_WAIT_UNTIL` | `domcontentloaded` | Playwright wait condition: `load`, `domcontentloaded`, or `networkidle`. |
@@ -315,6 +380,7 @@ Common request failures include:
 - missing required file parts
 - invalid JSON manifest
 - empty `documents` array
+- incomplete, empty, or non-string document delimiters
 - DOCX template rendering errors
 - LibreOffice conversion failures
 - missing files inside zip archives

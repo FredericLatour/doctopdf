@@ -1,13 +1,18 @@
 import { describe, expect, test } from 'bun:test'
 import { basename, join, parse } from 'node:path'
+import PizZip from 'pizzip'
+import { loadDelimiterDefaults } from '../../src/delimiters'
 import { type AppDependencies, createApp } from '../../src/index'
+import { renderMarkdownToHtml } from '../../src/markdown'
 import { mergePdfFiles } from '../../src/pdf'
 import { cleanupJob, createJobDirectories } from '../../src/temp'
+import { fillTemplate } from '../../src/template'
 import { extractZipFiles } from '../../src/zip'
 import {
   cleanupDir,
   createPdfBytes,
   createZipFromFiles,
+  docxWithDelimiters,
   fixtureBytes,
   fixtureText,
   makeTempDir,
@@ -80,6 +85,144 @@ describe('http service', () => {
       expect(await response.text()).toContain(
         'At least one document must be provided for rendering',
       )
+    })
+
+    test.each([
+      { start: '[[' },
+      { end: ']]' },
+      { start: '', end: ']]' },
+      { start: '[[', end: '' },
+      { start: 42, end: ']]' },
+      null,
+    ])(`${endpoint} returns 400 for invalid document delimiters %j`, async (delimiters) => {
+      const app = createApp(makeDependencies())
+      const form = new FormData()
+      form.set(
+        'manifest',
+        JSON.stringify({ documents: [{ ...document, delimiters }] }),
+      )
+      form.set('archive', new File([], 'bundle.zip'))
+
+      const response = await app.request(endpoint, {
+        method: 'POST',
+        body: form,
+      })
+
+      expect(response.status).toBe(400)
+      const issues = JSON.parse(await response.text())
+      expect(issues[0].path.slice(0, 3)).toEqual(['documents', 0, 'delimiters'])
+    })
+
+    test(`${endpoint} renders mixed document and environment delimiters without leaking overrides`, async () => {
+      const docxXml: string[] = []
+      const markdownHtml: string[] = []
+      const deps = makeDependencies()
+      const convert = deps.convertDocxToPdf
+      deps.fillTemplate = fillTemplate
+      deps.convertDocxToPdf = async (docxPath, outputDir) => {
+        const zip = new PizZip(await Bun.file(docxPath).arrayBuffer())
+        docxXml.push(zip.file('word/document.xml')?.asText() ?? '')
+        return convert(docxPath, outputDir)
+      }
+      deps.renderMarkdownToPdf = async (input, variables, theme, options) => {
+        markdownHtml.push(
+          await renderMarkdownToHtml(input, variables, theme, options),
+        )
+        return createPdfBytes(['Markdown page'])
+      }
+      const app = createApp(deps, {
+        delimiterDefaults: loadDelimiterDefaults({
+          DOCX_DELIMITER_START: '[',
+          DOCX_DELIMITER_END: ']',
+          MARKDOWN_DELIMITER_START: '[[',
+          MARKDOWN_DELIMITER_END: ']]',
+        }),
+      })
+      const docxEnvironment = { start: '[', end: ']' }
+      const docxOverride = { start: '<%', end: '%>' }
+      const markdownOverride = { start: '{', end: '}' }
+      const files = [
+        {
+          name: 'environment.docx',
+          type: 'docx',
+          bytes: await docxWithDelimiters(docxEnvironment),
+        },
+        {
+          name: 'override.docx',
+          type: 'docx',
+          bytes: await docxWithDelimiters(docxOverride),
+          delimiters: docxOverride,
+        },
+        {
+          name: 'environment-again.docx',
+          type: 'docx',
+          bytes: await docxWithDelimiters(docxEnvironment),
+        },
+        {
+          name: 'environment.md',
+          type: 'markdown',
+          bytes: new TextEncoder().encode('# [[title]]'),
+        },
+        {
+          name: 'override.md',
+          type: 'markdown',
+          bytes: new TextEncoder().encode('# {title}'),
+          delimiters: markdownOverride,
+        },
+        {
+          name: 'alias.md',
+          type: 'md',
+          bytes: new TextEncoder().encode('# [[title]]'),
+        },
+      ]
+      const form = new FormData()
+      form.set(
+        'manifest',
+        JSON.stringify({
+          variables: { title: 'Configured Review' },
+          documents: files.map((file, index) => ({
+            ...(endpoint === '/render'
+              ? { field: `document${index}` }
+              : { file: `docs/${file.name}` }),
+            type: file.type,
+            delimiters: file.delimiters,
+          })),
+        }),
+      )
+      if (endpoint === '/render') {
+        for (const [index, file] of files.entries()) {
+          form.set(`document${index}`, new File([file.bytes], file.name))
+        }
+      } else {
+        const zip = new PizZip()
+        for (const file of files) {
+          zip.file(`docs/${file.name}`, file.bytes)
+        }
+        form.set(
+          'archive',
+          new File([zip.generate({ type: 'arraybuffer' })], 'bundle.zip'),
+        )
+      }
+
+      const response = await app.request(endpoint, {
+        method: 'POST',
+        body: form,
+      })
+
+      expect(response.status).toBe(200)
+      expect(
+        await parsePdfPageCount(new Uint8Array(await response.arrayBuffer())),
+      ).toBe(6)
+      expect(docxXml).toHaveLength(3)
+      for (const xml of docxXml) {
+        expect(xml).toContain('Configured Review')
+      }
+      expect(markdownHtml).toHaveLength(3)
+      for (const html of markdownHtml) {
+        expect(html).toContain('<h1>Configured Review</h1>')
+        expect(html).toContain('<title>Configured Review</title>')
+        expect(html).not.toContain('__STYLES__')
+      }
     })
   }
 
