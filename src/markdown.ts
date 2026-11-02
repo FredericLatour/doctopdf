@@ -15,6 +15,8 @@ const markdown = new MarkdownIt({
   linkify: true,
   typographer: true,
 })
+// Markdown-it 15 disables bare-domain links by default; keep existing output.
+markdown.linkify.set({ fuzzyLink: true })
 
 export interface MarkdownTemplateOptions {
   label?: string
