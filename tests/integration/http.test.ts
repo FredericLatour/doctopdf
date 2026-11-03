@@ -94,24 +94,31 @@ describe('http service', () => {
       { start: '[[', end: '' },
       { start: 42, end: ']]' },
       null,
-    ])(`${endpoint} returns 400 for invalid document delimiters %j`, async (delimiters) => {
-      const app = createApp(makeDependencies())
-      const form = new FormData()
-      form.set(
-        'manifest',
-        JSON.stringify({ documents: [{ ...document, delimiters }] }),
-      )
-      form.set('archive', new File([], 'bundle.zip'))
+    ])(
+      `${endpoint} returns 400 for invalid document delimiters %j`,
+      async (delimiters) => {
+        const app = createApp(makeDependencies())
+        const form = new FormData()
+        form.set(
+          'manifest',
+          JSON.stringify({ documents: [{ ...document, delimiters }] }),
+        )
+        form.set('archive', new File([], 'bundle.zip'))
 
-      const response = await app.request(endpoint, {
-        method: 'POST',
-        body: form,
-      })
+        const response = await app.request(endpoint, {
+          method: 'POST',
+          body: form,
+        })
 
-      expect(response.status).toBe(400)
-      const issues = JSON.parse(await response.text())
-      expect(issues[0].path.slice(0, 3)).toEqual(['documents', 0, 'delimiters'])
-    })
+        expect(response.status).toBe(400)
+        const issues = JSON.parse(await response.text())
+        expect(issues[0].path.slice(0, 3)).toEqual([
+          'documents',
+          0,
+          'delimiters',
+        ])
+      },
+    )
 
     test(`${endpoint} renders mixed document and environment delimiters without leaking overrides`, async () => {
       const docxXml: string[] = []

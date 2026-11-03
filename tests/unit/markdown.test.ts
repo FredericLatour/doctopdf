@@ -5,6 +5,21 @@ import { renderMarkdownToHtml } from '../../src/markdown'
 import { repoRoot } from '../helpers'
 
 describe('Markdown templating', () => {
+  test('preserves automatic links, typography, and raw HTML', async () => {
+    const html = await renderMarkdownToHtml(
+      'example.com\n\nhttps://example.org\n\n"Quoted"...\n\n<strong>Raw HTML</strong>',
+      {},
+      'default',
+    )
+
+    expect(html).toContain('<a href="http://example.com">example.com</a>')
+    expect(html).toContain(
+      '<a href="https://example.org">https://example.org</a>',
+    )
+    expect(html).toContain('“Quoted”…')
+    expect(html).toContain('<strong>Raw HTML</strong>')
+  })
+
   test('keeps double-brace defaults and existing value expansion', async () => {
     const html = await renderMarkdownToHtml(
       '# {{ title }}\n\nMissing=[{{missing}}], Null=[{{nil}}], Zero=[{{zero}}], False=[{{no}}].\n\n{title}',
@@ -38,27 +53,27 @@ describe('Markdown templating', () => {
     expect(html).toContain('<p>Missing=[]</p>')
   })
 
-  test.each([
-    'default',
-    'color',
-  ])('document delimiters preserve %s theme placeholders, escaping, and styles', async (theme) => {
-    const html = await renderMarkdownToHtml(
-      '# [[title]]\n\n{{title}} / {title}',
-      { title: 'Sales & Service' },
-      theme,
-      { delimiters: { start: '[[', end: ']]' } },
-    )
-    const css = await Bun.file(
-      join(repoRoot, 'themes', theme, 'theme.css'),
-    ).text()
+  test.each(['default', 'color'])(
+    'document delimiters preserve %s theme placeholders, escaping, and styles',
+    async (theme) => {
+      const html = await renderMarkdownToHtml(
+        '# [[title]]\n\n{{title}} / {title}',
+        { title: 'Sales & Service' },
+        theme,
+        { delimiters: { start: '[[', end: ']]' } },
+      )
+      const css = await Bun.file(
+        join(repoRoot, 'themes', theme, 'theme.css'),
+      ).text()
 
-    expect(html).toContain('<title>Sales &amp; Service</title>')
-    expect(html).toContain('<h1>Sales &amp; Service</h1>')
-    expect(html).toContain('<p>{{title}} / {title}</p>')
-    expect(html).toContain(css)
-    expect(html).not.toContain('__STYLES__')
-    expect(html).not.toContain('{{content}}')
-  })
+      expect(html).toContain('<title>Sales &amp; Service</title>')
+      expect(html).toContain('<h1>Sales &amp; Service</h1>')
+      expect(html).toContain('<p>{{title}} / {title}</p>')
+      expect(html).toContain(css)
+      expect(html).not.toContain('__STYLES__')
+      expect(html).not.toContain('{{content}}')
+    },
+  )
 
   test('expands adjacent placeholders when delimiters contain variable-name characters', async () => {
     const html = await renderMarkdownToHtml(

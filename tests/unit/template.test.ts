@@ -36,18 +36,21 @@ describe('fillTemplate', () => {
     { start: '[[', end: ']]' },
     { start: '<%', end: '%>' },
     { start: '$^(', end: ')|*' },
-  ])('renders custom delimiters %j using the native DOCX parser', async (delimiters) => {
-    const input = Buffer.from(await docxWithDelimiters(delimiters))
-    const output = fillTemplate(
-      input,
-      { title: 'Custom DOCX Review' },
-      { delimiters },
-    )
-    const xml = new PizZip(output).file('word/document.xml')?.asText()
+  ])(
+    'renders custom delimiters %j using the native DOCX parser',
+    async (delimiters) => {
+      const input = Buffer.from(await docxWithDelimiters(delimiters))
+      const output = fillTemplate(
+        input,
+        { title: 'Custom DOCX Review' },
+        { delimiters },
+      )
+      const xml = new PizZip(output).file('word/document.xml')?.asText()
 
-    expect(xml).toContain('Custom DOCX Review')
-    expect(xml).not.toContain(`${delimiters.start}title${delimiters.end}`)
-  })
+      expect(xml).toContain('Custom DOCX Review')
+      expect(xml).not.toContain(`${delimiters.start}title${delimiters.end}`)
+    },
+  )
 
   test('custom delimiters do not change the defaults for later documents', async () => {
     const custom = { start: '[[', end: ']]' }

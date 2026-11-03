@@ -55,15 +55,14 @@ for (const { name, schema, document, reference, referenceError } of [
       })
     })
 
-    test.each([
-      'docx',
-      'markdown',
-      'md',
-    ])('accepts the %s document type', (type) => {
-      const parsed = schema.parse({ documents: [{ ...document, type }] })
+    test.each(['docx', 'markdown', 'md'])(
+      'accepts the %s document type',
+      (type) => {
+        const parsed = schema.parse({ documents: [{ ...document, type }] })
 
-      expect(parsed.documents[0]?.type).toBe(type)
-    })
+        expect(parsed.documents[0]?.type).toBe(type)
+      },
+    )
 
     test('rejects non-object variables', () => {
       for (const variables of [null, [], 'invalid', 42, true]) {

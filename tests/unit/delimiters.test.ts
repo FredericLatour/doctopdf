@@ -53,24 +53,23 @@ describe('delimiter configuration', () => {
     })
   }
 
-  test.each([
-    'docx',
-    'markdown',
-    'md',
-  ] as const)('document overrides take priority for %s without affecting other documents', (type) => {
-    const defaults = loadDelimiterDefaults({
-      DOCX_DELIMITER_START: '[',
-      DOCX_DELIMITER_END: ']',
-      MARKDOWN_DELIMITER_START: '[[',
-      MARKDOWN_DELIMITER_END: ']]',
-    })
-    const override = { start: '<%', end: '%>' }
+  test.each(['docx', 'markdown', 'md'] as const)(
+    'document overrides take priority for %s without affecting other documents',
+    (type) => {
+      const defaults = loadDelimiterDefaults({
+        DOCX_DELIMITER_START: '[',
+        DOCX_DELIMITER_END: ']',
+        MARKDOWN_DELIMITER_START: '[[',
+        MARKDOWN_DELIMITER_END: ']]',
+      })
+      const override = { start: '<%', end: '%>' }
 
-    expect(
-      resolveDocumentDelimiters({ type, delimiters: override }, defaults),
-    ).toEqual(override)
-    expect(resolveDocumentDelimiters({ type }, defaults)).toEqual(
-      type === 'docx' ? { start: '[', end: ']' } : { start: '[[', end: ']]' },
-    )
-  })
+      expect(
+        resolveDocumentDelimiters({ type, delimiters: override }, defaults),
+      ).toEqual(override)
+      expect(resolveDocumentDelimiters({ type }, defaults)).toEqual(
+        type === 'docx' ? { start: '[', end: ']' } : { start: '[[', end: ']]' },
+      )
+    },
+  )
 })
