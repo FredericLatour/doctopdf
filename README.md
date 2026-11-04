@@ -403,8 +403,37 @@ These classifications intentionally differ from the previous implementation: Chr
 
 ## Application architecture
 
-Hono owns HTTP parsing, Zod validation, and response/error mapping in [`src/index.ts`](src/index.ts). [`src/render.ts`](src/render.ts) contains the shared `DocumentRenderer` pipeline. `DocxRenderer`, `MarkdownRenderer`, `Browser`, `ZipReader`, `PdfMerger`, and `JobWorkspace` expose typed Effect methods and are assembled with explicit layers in [`src/runtime.ts`](src/runtime.ts).
+The source folders separate application setup, HTTP handling, Effect services, and document helpers:
 
-[`src/main.ts`](src/main.ts) validates configuration and starts the application; [`src/server.ts`](src/server.ts) owns the server's drain/disposal lifecycle. One `ManagedRuntime` owns shared services. Job workspaces belong to request scopes, and foreign asynchronous adapters await cancellation cleanup before releasing their scope or concurrency permit.
+```text
+src/
+├── main.ts                      # Entrypoint and shutdown signals
+├── errors.ts                    # Tagged failures and deadline handling
+├── app/
+│   ├── config.ts                # Validated startup settings
+│   └── runtime.ts               # Effect layer composition
+├── http/
+│   ├── app.ts                   # Hono routes and HTTP error mapping
+│   └── server.ts                # Server startup and drain/disposal
+├── services/
+│   ├── document-renderer.ts     # Shared rendering pipeline
+│   ├── docx-renderer.ts         # DOCX conversion with LibreOffice
+│   ├── markdown-renderer.ts     # Markdown rendering
+│   ├── browser.ts              # Scoped Chromium lifecycle
+│   ├── pdf-merger.ts
+│   ├── job-workspace.ts
+│   ├── zip-reader.ts
+│   └── cancellation.ts          # Cancellation support for async adapters
+└── documents/
+    ├── schemas.ts              # Zod request schemas and inferred types
+    ├── delimiters.ts
+    ├── docx-template.ts
+    ├── theme.ts
+    └── filenames.ts
+```
+
+Hono owns HTTP parsing, Zod validation, and response/error mapping in [`src/http/app.ts`](src/http/app.ts). [`src/services/document-renderer.ts`](src/services/document-renderer.ts) contains the shared `DocumentRenderer` pipeline. `DocxRenderer`, `MarkdownRenderer`, `Browser`, `ZipReader`, `PdfMerger`, and `JobWorkspace` expose typed Effect methods and are assembled with explicit layers in [`src/app/runtime.ts`](src/app/runtime.ts).
+
+[`src/main.ts`](src/main.ts) validates configuration and starts the application; [`src/http/server.ts`](src/http/server.ts) owns the server's drain/disposal lifecycle. One `ManagedRuntime` owns shared services. Job workspaces belong to request scopes, and foreign asynchronous adapters await cancellation cleanup before releasing their scope or concurrency permit.
 
 Tests replace services with `Layer.succeed`, keeping fast HTTP tests independent of external renderers. See [`tests/app.ts`](tests/app.ts) for test-layer composition. Run `bun run check`, `bun run typecheck`, and `bun run test:fast`; `bun run test:e2e` additionally exercises real rendering, process/browser cancellation, HTTP disconnects, and shutdown in Docker.

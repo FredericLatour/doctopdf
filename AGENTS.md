@@ -6,14 +6,12 @@ Write clear, cohesive, maintainable code. Prefer the simplest design that fully 
 
 `doctopdf` is a Bun and Hono service that renders DOCX and Markdown documents, merges PDFs in manifest order, and returns the result.
 
-- `src/index.ts`: Hono parsing, Zod validation, and HTTP error mapping; `createApp` accepts a managed runtime and configuration.
-- `src/render.ts`: shared Effect rendering pipeline. `src/runtime.ts`: service-layer composition.
-- `src/config.ts` and `src/errors.ts`: startup settings and tagged domain failures.
-- `src/main.ts` and `src/server.ts`: startup and bounded shutdown.
-- `src/types.ts`: Zod request schemas and their inferred TypeScript types.
-- `src/template.ts` and `src/libreoffice.ts`: DOCX templating and conversion.
-- `src/markdown.ts` and `src/theme.ts`: Markdown rendering and HTML theme expansion. `src/browser.ts`: scoped Chromium lifecycle.
-- `src/pdf.ts`, `src/temp.ts`, `src/zip.ts`, and `src/utils.ts`: PDF merging, job directories, archive handling, and filename helpers.
+- `src/main.ts`: application entrypoint and shutdown signals.
+- `src/app/`: startup configuration and Effect service-layer composition.
+- `src/http/`: Hono parsing, validation, HTTP error mapping, and server drain/disposal; `createApp` accepts a managed runtime and configuration.
+- `src/services/`: shared `DocumentRenderer` pipeline, DOCX/Markdown renderers, Chromium lifecycle, PDF merging, job workspaces, ZIP reading, and asynchronous cancellation support.
+- `src/documents/`: Zod schemas and inferred types, delimiter configuration, DOCX templating, HTML theme expansion, and filename helpers.
+- `src/errors.ts`: shared tagged failures and typed deadline handling.
 - `themes/`: HTML and CSS assets. `tests/`: unit, HTTP integration, and Docker end-to-end coverage.
 
 ## Code design

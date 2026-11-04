@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { join } from 'node:path'
 
-import { renderMarkdownToHtml } from '../../src/markdown'
+import { renderMarkdownToHtml } from '../../src/services/markdown-renderer'
 import { repoRoot } from '../helpers'
 
 describe('Markdown templating', () => {

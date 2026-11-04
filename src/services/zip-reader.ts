@@ -2,8 +2,8 @@ import { posix as pathPosix } from 'node:path'
 import type { Readable } from 'node:stream'
 import { Context, type Effect, Layer } from 'effect'
 import yauzl from 'yauzl'
-import { InvalidArchive } from './errors'
-import { cancellable } from './operations'
+import { InvalidArchive } from '../errors'
+import { cancellable } from './cancellation'
 
 export interface ZipExtractResult {
   files: Map<string, Buffer>

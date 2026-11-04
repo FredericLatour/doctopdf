@@ -1,6 +1,6 @@
-import { loadConfig } from './config'
-import { makeRuntime } from './runtime'
-import { startServer } from './server'
+import { loadConfig } from './app/config'
+import { makeRuntime } from './app/runtime'
+import { startServer } from './http/server'
 
 const config = loadConfig()
 const { shutdown } = await startServer(makeRuntime(config), config)

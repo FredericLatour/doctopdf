@@ -3,7 +3,7 @@ import { describe, expect, test } from 'bun:test'
 import {
   loadDelimiterDefaults,
   resolveDocumentDelimiters,
-} from '../../src/delimiters'
+} from '../../src/documents/delimiters'
 
 describe('delimiter configuration', () => {
   test('keeps the existing defaults when no environment settings are present', () => {

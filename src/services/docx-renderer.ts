@@ -4,18 +4,18 @@ import { tmpdir } from 'node:os'
 import { join, parse } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { Context, Effect, Layer, Semaphore } from 'effect'
-import { RenderConfig } from './config'
+import { RenderConfig } from '../app/config'
+import { fillTemplate } from '../documents/docx-template'
+import type { Delimiters } from '../documents/schemas'
 import {
   ConversionError,
   deadline,
   type RenderTimeout,
   TemplateError,
   WorkspaceError,
-} from './errors'
-import { cancellable } from './operations'
-import { JobWorkspace } from './temp'
-import { fillTemplate } from './template'
-import type { Delimiters } from './types'
+} from '../errors'
+import { cancellable } from './cancellation'
+import { JobWorkspace } from './job-workspace'
 
 export interface DocxInput {
   bytes: Buffer

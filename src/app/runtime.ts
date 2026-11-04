@@ -1,12 +1,12 @@
 import { Layer, ManagedRuntime } from 'effect'
-import { Browser } from './browser'
+import { Browser } from '../services/browser'
+import { DocumentRenderer } from '../services/document-renderer'
+import { DocxRenderer } from '../services/docx-renderer'
+import { JobWorkspace } from '../services/job-workspace'
+import { MarkdownRenderer } from '../services/markdown-renderer'
+import { PdfMerger } from '../services/pdf-merger'
+import { ZipReader } from '../services/zip-reader'
 import { RenderConfig, type RenderSettings } from './config'
-import { DocxRenderer } from './libreoffice'
-import { MarkdownRenderer } from './markdown'
-import { PdfMerger } from './pdf'
-import { DocumentRenderer } from './render'
-import { JobWorkspace } from './temp'
-import { ZipReader } from './zip'
 
 export function makeAppLayer(config: RenderSettings) {
   const renderers = Layer.mergeAll(

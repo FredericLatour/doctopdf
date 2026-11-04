@@ -1,14 +1,21 @@
 import { afterEach } from 'bun:test'
 import { basename, join, parse } from 'node:path'
 import { Effect, Layer, ManagedRuntime } from 'effect'
-import { loadConfig, RenderConfig, type RenderSettings } from '../src/config'
-import { createApp } from '../src/index'
-import { type DocxInput, DocxRenderer } from '../src/libreoffice'
-import { type MarkdownInput, MarkdownRenderer } from '../src/markdown'
-import { PdfMerger } from '../src/pdf'
-import { DocumentRenderer } from '../src/render'
-import { JobWorkspace } from '../src/temp'
-import { ZipReader } from '../src/zip'
+import {
+  loadConfig,
+  RenderConfig,
+  type RenderSettings,
+} from '../src/app/config'
+import { createApp } from '../src/http/app'
+import { DocumentRenderer } from '../src/services/document-renderer'
+import { type DocxInput, DocxRenderer } from '../src/services/docx-renderer'
+import { JobWorkspace } from '../src/services/job-workspace'
+import {
+  type MarkdownInput,
+  MarkdownRenderer,
+} from '../src/services/markdown-renderer'
+import { PdfMerger } from '../src/services/pdf-merger'
+import { ZipReader } from '../src/services/zip-reader'
 import { createPdfBytes, writePdf } from './helpers'
 
 const runtimes: ManagedRuntime.ManagedRuntime<DocumentRenderer, never>[] = []

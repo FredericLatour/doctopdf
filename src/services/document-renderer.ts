@@ -1,20 +1,20 @@
 import { Buffer } from 'node:buffer'
 import { join } from 'node:path'
 import { Context, Effect, Layer } from 'effect'
-import { RenderConfig } from './config'
-import { resolveDocumentDelimiters } from './delimiters'
-import { InvalidInput, MissingDocument, type RenderError } from './errors'
-import { DocxRenderer } from './libreoffice'
-import { MarkdownRenderer } from './markdown'
-import { PdfMerger } from './pdf'
-import { JobWorkspace } from './temp'
-import type { DocumentDescriptor } from './types'
+import { RenderConfig } from '../app/config'
+import { resolveDocumentDelimiters } from '../documents/delimiters'
 import {
   ensureDocxExtension,
   ensurePdfExtension,
   sanitizeFilename,
-} from './utils'
-import { normalizeZipPath, ZipReader } from './zip'
+} from '../documents/filenames'
+import type { DocumentDescriptor } from '../documents/schemas'
+import { InvalidInput, MissingDocument, type RenderError } from '../errors'
+import { DocxRenderer } from './docx-renderer'
+import { JobWorkspace } from './job-workspace'
+import { MarkdownRenderer } from './markdown-renderer'
+import { PdfMerger } from './pdf-merger'
+import { normalizeZipPath, ZipReader } from './zip-reader'
 
 export interface InputDocument extends Omit<DocumentDescriptor, 'field'> {
   reference: string

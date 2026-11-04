@@ -1,8 +1,8 @@
 import { Context, Effect, type Fiber, Layer, Scope, Semaphore } from 'effect'
 import { chromium, errors as playwrightErrors } from 'playwright-core'
-import { RenderConfig, type RenderSettings } from './config'
-import { ConversionError, deadline, RenderTimeout } from './errors'
-import { cancellable } from './operations'
+import { RenderConfig, type RenderSettings } from '../app/config'
+import { ConversionError, deadline, RenderTimeout } from '../errors'
+import { cancellable } from './cancellation'
 
 export interface BrowserSession {
   isConnected: () => boolean

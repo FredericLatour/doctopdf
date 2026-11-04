@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context, Effect, Layer, type Scope } from 'effect'
-import { WorkspaceError } from './errors'
+import { WorkspaceError } from '../errors'
 
 export interface JobDirectories {
   base: string

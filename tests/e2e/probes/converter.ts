@@ -1,9 +1,9 @@
 import { strict as assert } from 'node:assert'
 import { readdir, readlink, stat } from 'node:fs/promises'
 import { Effect, Exit, Layer, ManagedRuntime } from 'effect'
-import { loadConfig, RenderConfig } from '../../../src/config'
-import { DocxRenderer } from '../../../src/libreoffice'
-import { JobWorkspace } from '../../../src/temp'
+import { loadConfig, RenderConfig } from '../../../src/app/config'
+import { DocxRenderer } from '../../../src/services/docx-renderer'
+import { JobWorkspace } from '../../../src/services/job-workspace'
 
 const profilesBefore = new Set(
   (await readdir('/tmp')).filter((name) =>

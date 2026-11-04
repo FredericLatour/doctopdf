@@ -1,6 +1,6 @@
-import type { RenderSettings } from './config'
-import { createApp } from './index'
-import type { AppRuntime } from './runtime'
+import type { RenderSettings } from '../app/config'
+import type { AppRuntime } from '../app/runtime'
+import { createApp } from './app'
 
 export async function startServer(runtime: AppRuntime, config: RenderSettings) {
   await runtime.context()

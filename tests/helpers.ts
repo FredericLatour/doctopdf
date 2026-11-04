@@ -6,7 +6,7 @@ import { basename, dirname, join, resolve } from 'node:path'
 import { PDFDocument, StandardFonts } from 'pdf-lib'
 import PizZip from 'pizzip'
 
-import type { Delimiters } from '../src/types'
+import type { Delimiters } from '../src/documents/schemas'
 
 export const repoRoot = resolve(import.meta.dir, '..')
 export const fixturesDir = join(repoRoot, 'tests', 'fixtures')

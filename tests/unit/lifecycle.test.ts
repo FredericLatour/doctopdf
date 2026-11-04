@@ -1,16 +1,16 @@
 import { afterEach, describe, expect, spyOn, test } from 'bun:test'
 import * as fs from 'node:fs/promises'
 import { Effect, Exit, Layer, ManagedRuntime } from 'effect'
+import { loadConfig, RenderConfig } from '../../src/app/config'
+import { ConversionError, deadline } from '../../src/errors'
 import {
   Browser,
   type BrowserSession,
   makeBrowserLayer,
-} from '../../src/browser'
-import { loadConfig, RenderConfig } from '../../src/config'
-import { ConversionError, deadline } from '../../src/errors'
-import { runConversion } from '../../src/libreoffice'
-import { cancellable } from '../../src/operations'
-import { JobWorkspace } from '../../src/temp'
+} from '../../src/services/browser'
+import { cancellable } from '../../src/services/cancellation'
+import { runConversion } from '../../src/services/docx-renderer'
+import { JobWorkspace } from '../../src/services/job-workspace'
 
 const browsers: ManagedRuntime.ManagedRuntime<Browser, never>[] = []
 afterEach(async () => {

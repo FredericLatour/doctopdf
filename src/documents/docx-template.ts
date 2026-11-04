@@ -3,7 +3,7 @@ import Docxtemplater from 'docxtemplater'
 import PizZip from 'pizzip'
 
 import { DEFAULT_DELIMITERS } from './delimiters'
-import type { Delimiters } from './types'
+import type { Delimiters } from './schemas'
 
 export interface TemplateOptions {
   delimiters?: Delimiters

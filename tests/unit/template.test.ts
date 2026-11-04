@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import PizZip from 'pizzip'
 
-import { fillTemplate } from '../../src/template'
+import { fillTemplate } from '../../src/documents/docx-template'
 import { docxWithDelimiters, fixtureBytes } from '../helpers'
 
 describe('fillTemplate', () => {

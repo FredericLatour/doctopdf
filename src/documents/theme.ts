@@ -7,7 +7,7 @@ export interface ThemeAssets {
 }
 
 export async function loadTheme(theme: string): Promise<ThemeAssets> {
-  const themesDir = join(import.meta.dir, '..', 'themes')
+  const themesDir = join(import.meta.dir, '..', '..', 'themes')
   const templatePath = join(themesDir, theme, 'template.html')
   const cssPath = join(themesDir, theme, 'theme.css')
 

@@ -2,7 +2,7 @@ import {
   type Delimiters,
   DelimitersSchema,
   type DocumentDescriptor,
-} from './types'
+} from './schemas'
 
 export interface DelimiterDefaults {
   docx: Delimiters

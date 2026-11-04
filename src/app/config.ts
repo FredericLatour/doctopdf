@@ -1,6 +1,9 @@
 import { Context, Layer } from 'effect'
 import { z } from 'zod'
-import { type DelimiterDefaults, loadDelimiterDefaults } from './delimiters'
+import {
+  type DelimiterDefaults,
+  loadDelimiterDefaults,
+} from '../documents/delimiters'
 
 const nonnegative = z.coerce.number().int().min(0).max(2_147_483_647)
 const settings = z.object({

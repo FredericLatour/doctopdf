@@ -1,11 +1,17 @@
 import { Buffer } from 'node:buffer'
 import { Cause, Effect, Exit } from 'effect'
 import { type Context, Hono } from 'hono'
-import type { RenderSettings } from './config'
-import { deadline, InvalidInput, type RenderError } from './errors'
-import { DocumentRenderer, type RenderInput } from './render'
-import type { AppRuntime } from './runtime'
-import { RenderRequestSchema, RenderZipRequestSchema } from './types'
+import type { RenderSettings } from '../app/config'
+import type { AppRuntime } from '../app/runtime'
+import {
+  RenderRequestSchema,
+  RenderZipRequestSchema,
+} from '../documents/schemas'
+import { deadline, InvalidInput, type RenderError } from '../errors'
+import {
+  DocumentRenderer,
+  type RenderInput,
+} from '../services/document-renderer'
 
 export function createApp(runtime: AppRuntime, config: RenderSettings) {
   const app = new Hono()

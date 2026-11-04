@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { loadConfig } from '../../src/config'
+import { loadConfig } from '../../src/app/config'
 
 test('validates effective settings once while allowing disabled optional deadlines', () => {
   expect(
