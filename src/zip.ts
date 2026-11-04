@@ -1,108 +1,85 @@
 import { posix as pathPosix } from 'node:path'
+import type { Readable } from 'node:stream'
+import { Context, type Effect, Layer } from 'effect'
 import yauzl from 'yauzl'
+import { InvalidArchive } from './errors'
+import { cancellable } from './operations'
 
 export interface ZipExtractResult {
   files: Map<string, Buffer>
+}
+export class ZipReader extends Context.Service<
+  ZipReader,
+  {
+    read: (
+      archive: Buffer,
+      wantedFiles: string[],
+    ) => Effect.Effect<ZipExtractResult, InvalidArchive>
+  }
+>()('doctopdf/ZipReader') {
+  static layer = Layer.succeed(ZipReader, {
+    read: (archive, wanted) =>
+      cancellable(
+        (signal) => extractZipFiles(archive, wanted, signal),
+        (cause) =>
+          new InvalidArchive({
+            message: 'Invalid ZIP archive or entry path',
+            cause,
+          }),
+      ),
+  })
 }
 
 export async function extractZipFiles(
   archive: Buffer,
   wantedFiles: string[],
+  signal?: AbortSignal,
 ): Promise<ZipExtractResult> {
-  const wanted = normalizeWanted(wantedFiles)
-
-  return new Promise((resolve, reject) => {
-    yauzl.fromBuffer(archive, { lazyEntries: true }, (err, zipfile) => {
-      if (err || !zipfile) {
-        reject(err ?? new Error('Failed to open zip archive'))
-        return
+  const wanted = new Set(
+    wantedFiles.map((name) => {
+      const normalized = normalizeZipPath(name)
+      if (!normalized) throw new Error(`Invalid file path in manifest: ${name}`)
+      return normalized
+    }),
+  )
+  signal?.throwIfAborted()
+  const zip = await yauzl.fromBufferPromise(archive)
+  let active: Readable | undefined
+  const abort = () => active?.destroy(new Error('ZIP read interrupted'))
+  signal?.addEventListener('abort', abort, { once: true })
+  try {
+    const files = new Map<string, Buffer>()
+    signal?.throwIfAborted()
+    for await (const entry of zip.eachEntry()) {
+      signal?.throwIfAborted()
+      if (entry.fileName.endsWith('/')) continue
+      const name = normalizeZipPath(entry.fileName)
+      if (!name) throw new Error(`Invalid zip entry path: ${entry.fileName}`)
+      if (!wanted.has(name)) continue
+      active = await zip.openReadStreamPromise(entry)
+      try {
+        signal?.throwIfAborted()
+        const chunks: Buffer[] = []
+        for await (const chunk of active) {
+          signal?.throwIfAborted()
+          chunks.push(Buffer.from(chunk))
+        }
+        files.set(name, Buffer.concat(chunks))
+      } finally {
+        active.destroy()
+        active = undefined
       }
-
-      const files = new Map<string, Buffer>()
-      let pendingReads = 0
-      let ended = false
-
-      const finalize = () => {
-        if (!ended || pendingReads > 0) {
-          return
-        }
-        resolve({ files })
-      }
-
-      const fail = (error: Error) => {
-        try {
-          zipfile.close()
-        } catch {
-          // ignore cleanup errors
-        }
-        reject(error)
-      }
-
-      zipfile.on('error', (error) => fail(error))
-      zipfile.on('end', () => {
-        ended = true
-        finalize()
-      })
-
-      zipfile.readEntry()
-      zipfile.on('entry', (entry) => {
-        if (entry.fileName.endsWith('/')) {
-          zipfile.readEntry()
-          return
-        }
-
-        const normalized = normalizeZipPath(entry.fileName)
-        if (!normalized) {
-          fail(new Error(`Invalid zip entry path: ${entry.fileName}`))
-          return
-        }
-
-        if (!wanted.has(normalized)) {
-          zipfile.readEntry()
-          return
-        }
-
-        pendingReads += 1
-        zipfile.openReadStream(entry, (streamErr, stream) => {
-          if (streamErr || !stream) {
-            fail(
-              streamErr ??
-                new Error(`Failed to read zip entry ${entry.fileName}`),
-            )
-            return
-          }
-
-          const chunks: Buffer[] = []
-          stream.on('data', (chunk) => chunks.push(Buffer.from(chunk)))
-          stream.on('error', (error) => fail(error))
-          stream.on('end', () => {
-            files.set(normalized, Buffer.concat(chunks))
-            pendingReads -= 1
-            zipfile.readEntry()
-            finalize()
-          })
-        })
-      })
-    })
-  })
-}
-
-function normalizeWanted(files: string[]): Set<string> {
-  const set = new Set<string>()
-  for (const file of files) {
-    const normalized = normalizeZipPath(file)
-    if (!normalized) {
-      throw new Error(`Invalid file path in manifest: ${file}`)
     }
-    set.add(normalized)
+    return { files }
+  } finally {
+    signal?.removeEventListener('abort', abort)
+    active?.destroy()
+    zip.close()
   }
-  return set
 }
 
 export function normalizeZipPath(value: string): string | null {
   const normalized = pathPosix.normalize(value).replace(/^\.\//, '')
-  if (normalized.startsWith('/') || normalized.includes('..')) {
-    return null
-  }
+  if (normalized.startsWith('/') || normalized.includes('..')) return null
   return normalized
 }

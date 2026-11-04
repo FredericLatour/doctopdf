@@ -1,13 +1,14 @@
 import { describe, expect, test } from 'bun:test'
-import { basename, join, parse } from 'node:path'
+import { join, parse } from 'node:path'
+import { Effect, Exit } from 'effect'
 import PizZip from 'pizzip'
+import { loadConfig } from '../../src/config'
 import { loadDelimiterDefaults } from '../../src/delimiters'
-import { type AppDependencies, createApp } from '../../src/index'
+import { ConversionError, InvalidInput, RenderTimeout } from '../../src/errors'
 import { renderMarkdownToHtml } from '../../src/markdown'
-import { mergePdfFiles } from '../../src/pdf'
-import { cleanupJob, createJobDirectories } from '../../src/temp'
+import { DocumentRenderer } from '../../src/render'
 import { fillTemplate } from '../../src/template'
-import { extractZipFiles } from '../../src/zip'
+import { makeTestApp } from '../app'
 import {
   cleanupDir,
   createPdfBytes,
@@ -20,27 +21,9 @@ import {
   writePdf,
 } from '../helpers'
 
-function makeDependencies(): AppDependencies {
-  return {
-    createJobDirectories,
-    cleanupJob,
-    extractZipFiles,
-    fillTemplate: (template) => template,
-    async convertDocxToPdf(docxPath, outputDir) {
-      const outputPath = join(outputDir, `${parse(docxPath).name}.pdf`)
-      await writePdf(outputPath, [`DOCX:${basename(docxPath)}`])
-      return outputPath
-    },
-    async renderMarkdownToPdf(markdownInput) {
-      return createPdfBytes([`MD:${markdownInput.trim()}`])
-    },
-    mergePdfFiles,
-  }
-}
-
 describe('http service', () => {
   test('healthz returns ok', async () => {
-    const app = createApp(makeDependencies())
+    const { app } = makeTestApp()
     const response = await app.request('/healthz')
 
     expect(response.status).toBe(200)
@@ -52,7 +35,7 @@ describe('http service', () => {
     { endpoint: '/render-zip', document: { file: 'cover.docx' } },
   ]) {
     test(`${endpoint} returns 400 for invalid template variables`, async () => {
-      const app = createApp(makeDependencies())
+      const { app } = makeTestApp()
       const form = new FormData()
       form.set(
         'manifest',
@@ -71,7 +54,7 @@ describe('http service', () => {
     })
 
     test(`${endpoint} returns 400 for an empty document list`, async () => {
-      const app = createApp(makeDependencies())
+      const { app } = makeTestApp()
       const form = new FormData()
       form.set('manifest', JSON.stringify({ documents: [] }))
       form.set('archive', new File([], 'bundle.zip'))
@@ -97,7 +80,7 @@ describe('http service', () => {
     ])(
       `${endpoint} returns 400 for invalid document delimiters %j`,
       async (delimiters) => {
-        const app = createApp(makeDependencies())
+        const { app } = makeTestApp()
         const form = new FormData()
         form.set(
           'manifest',
@@ -123,27 +106,46 @@ describe('http service', () => {
     test(`${endpoint} renders mixed document and environment delimiters without leaking overrides`, async () => {
       const docxXml: string[] = []
       const markdownHtml: string[] = []
-      const deps = makeDependencies()
-      const convert = deps.convertDocxToPdf
-      deps.fillTemplate = fillTemplate
-      deps.convertDocxToPdf = async (docxPath, outputDir) => {
-        const zip = new PizZip(await Bun.file(docxPath).arrayBuffer())
-        docxXml.push(zip.file('word/document.xml')?.asText() ?? '')
-        return convert(docxPath, outputDir)
-      }
-      deps.renderMarkdownToPdf = async (input, variables, theme, options) => {
-        markdownHtml.push(
-          await renderMarkdownToHtml(input, variables, theme, options),
-        )
-        return createPdfBytes(['Markdown page'])
-      }
-      const app = createApp(deps, {
-        delimiterDefaults: loadDelimiterDefaults({
-          DOCX_DELIMITER_START: '[',
-          DOCX_DELIMITER_END: ']',
-          MARKDOWN_DELIMITER_START: '[[',
-          MARKDOWN_DELIMITER_END: ']]',
-        }),
+      const { app } = makeTestApp({
+        docx: {
+          render: (input) =>
+            Effect.promise(async () => {
+              const bytes = fillTemplate(input.bytes, input.variables, {
+                delimiters: input.delimiters,
+              })
+              const zip = new PizZip(bytes)
+              docxXml.push(zip.file('word/document.xml')?.asText() ?? '')
+              const path = join(
+                input.outputDir,
+                `${parse(input.path).name}.pdf`,
+              )
+              await writePdf(path, ['DOCX page'])
+              return path
+            }),
+        },
+        markdown: {
+          render: (input) =>
+            Effect.promise(async () => {
+              markdownHtml.push(
+                await renderMarkdownToHtml(
+                  input.text,
+                  input.variables,
+                  input.theme,
+                  { delimiters: input.delimiters },
+                ),
+              )
+              return createPdfBytes(['Markdown page'])
+            }),
+        },
+        config: loadConfig(
+          {},
+          loadDelimiterDefaults({
+            DOCX_DELIMITER_START: '[',
+            DOCX_DELIMITER_END: ']',
+            MARKDOWN_DELIMITER_START: '[[',
+            MARKDOWN_DELIMITER_END: ']]',
+          }),
+        ),
       })
       const docxEnvironment = { start: '[', end: ']' }
       const docxOverride = { start: '<%', end: '%>' }
@@ -234,7 +236,7 @@ describe('http service', () => {
   }
 
   test('render merges docx and markdown inputs', async () => {
-    const app = createApp(makeDependencies())
+    const { app } = makeTestApp()
     const form = new FormData()
     form.set(
       'manifest',
@@ -279,7 +281,7 @@ describe('http service', () => {
   })
 
   test('render-zip accepts nested archive paths', async () => {
-    const app = createApp(makeDependencies())
+    const { app } = makeTestApp()
     const tempDir = await makeTempDir('doctopdf-http-')
 
     try {
@@ -325,7 +327,7 @@ describe('http service', () => {
   })
 
   test('render returns 400 when a required part is missing', async () => {
-    const app = createApp(makeDependencies())
+    const { app } = makeTestApp()
     const form = new FormData()
     form.set(
       'manifest',
@@ -345,3 +347,146 @@ describe('http service', () => {
     )
   })
 })
+
+describe('HTTP failure boundary', () => {
+  test('maps infrastructure failures to 500 without exposing causes', async () => {
+    const { app } = makeTestApp({
+      markdown: {
+        render: () =>
+          Effect.fail(
+            new ConversionError({
+              stage: 'browser',
+              cause: new Error('private template value'),
+            }),
+          ),
+      },
+    })
+    const response = await app.request('/render', {
+      method: 'POST',
+      body: markdownForm(),
+    })
+    expect(response.status).toBe(500)
+    expect(await response.text()).toBe('{"message":"Unexpected server error"}')
+  })
+  test('maps typed timeouts to 504', async () => {
+    const { app } = makeTestApp({
+      markdown: {
+        render: () =>
+          Effect.fail(new RenderTimeout({ stage: 'markdown', timeoutMs: 10 })),
+      },
+    })
+    const response = await app.request('/render', {
+      method: 'POST',
+      body: markdownForm(),
+    })
+    expect(response.status).toBe(504)
+  })
+  test('maps malformed archives to 400', async () => {
+    const { app } = makeTestApp()
+    const form = new FormData()
+    form.set('manifest', JSON.stringify({ documents: [{ file: 'a.docx' }] }))
+    form.set('archive', new File(['invalid'], 'bundle.zip'))
+    const response = await app.request('/render-zip', {
+      method: 'POST',
+      body: form,
+    })
+    expect(response.status).toBe(400)
+  })
+  test('cancels body consumption on timeout', async () => {
+    let cancelled = false
+    const body = new ReadableStream<Uint8Array>({
+      cancel() {
+        cancelled = true
+      },
+    })
+    const { app } = makeTestApp({
+      config: loadConfig({ FORMDATA_TIMEOUT_MS: '10' }),
+    })
+    const response = await app.request('/render', {
+      method: 'POST',
+      body,
+      headers: { 'Content-Type': 'multipart/form-data; boundary=test' },
+    })
+    expect(response.status).toBe(504)
+    expect(cancelled).toBe(true)
+  })
+  test('distinguishes interruption from invalid input', async () => {
+    const started = Promise.withResolvers<void>()
+    let finalized = false
+    const { app } = makeTestApp({
+      markdown: {
+        render: () =>
+          Effect.sync(() => started.resolve()).pipe(
+            Effect.andThen(Effect.never),
+            Effect.ensuring(
+              Effect.sync(() => {
+                finalized = true
+              }),
+            ),
+          ),
+      },
+    })
+    const abort = new AbortController()
+    const task = app.request('/render', {
+      method: 'POST',
+      body: markdownForm(),
+      signal: abort.signal,
+    })
+    await started.promise
+    abort.abort()
+    expect((await task).status).toBe(499)
+    expect(finalized).toBe(true)
+  })
+  test('cleanup failure retains the original failure in the cause', async () => {
+    const original = new InvalidInput({ message: 'original' })
+    const cleanup = new Error('cleanup')
+    const { runtime } = makeTestApp({
+      workspace: {
+        acquire: Effect.acquireRelease(
+          Effect.succeed({ base: '/unused', docx: '/unused', pdf: '/unused' }),
+          () => Effect.die(cleanup),
+        ),
+        write: () => Effect.void,
+      },
+      markdown: { render: () => Effect.fail(original) },
+    })
+    const exit = await runtime.runPromiseExit(
+      DocumentRenderer.use((renderer) =>
+        renderer.render({
+          variables: {},
+          theme: 'default',
+          documents: [{ reference: 'body', type: 'md' }],
+          source: {
+            kind: 'multipart',
+            files: new Map([['body', new File(['hello'], 'body.md')]]),
+          },
+        }),
+      ),
+    )
+    expect(Exit.isFailure(exit)).toBe(true)
+    if (Exit.isFailure(exit)) {
+      expect(
+        exit.cause.reasons.some(
+          (r) =>
+            (r._tag === 'Fail' && r.error === original) ||
+            (r._tag === 'Die' && r.defect === original),
+        ),
+      ).toBe(true)
+      expect(
+        exit.cause.reasons.some(
+          (r) => r._tag === 'Die' && r.defect === cleanup,
+        ),
+      ).toBe(true)
+    }
+  })
+})
+
+function markdownForm() {
+  const form = new FormData()
+  form.set(
+    'manifest',
+    JSON.stringify({ documents: [{ field: 'body', type: 'md' }] }),
+  )
+  form.set('body', new File(['# Hello'], 'body.md'))
+  return form
+}

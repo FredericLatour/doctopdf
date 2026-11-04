@@ -1,425 +1,199 @@
 import { Buffer } from 'node:buffer'
-import crypto from 'node:crypto'
-import { writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
-
-import { Hono } from 'hono'
-import { HTTPException } from 'hono/http-exception'
-
-import {
-  type DelimiterDefaults,
-  loadDelimiterDefaults,
-  resolveDocumentDelimiters,
-} from './delimiters'
-import { convertDocxToPdf } from './libreoffice'
-import { renderMarkdownToPdf } from './markdown'
-import { mergePdfFiles } from './pdf'
-import { cleanupJob, createJobDirectories } from './temp'
-import { fillTemplate } from './template'
+import { Cause, Effect, Exit } from 'effect'
+import { type Context, Hono } from 'hono'
+import type { RenderSettings } from './config'
+import { deadline, InvalidInput, type RenderError } from './errors'
+import { DocumentRenderer, type RenderInput } from './render'
+import type { AppRuntime } from './runtime'
 import { RenderRequestSchema, RenderZipRequestSchema } from './types'
-import {
-  ensureDocxExtension,
-  ensurePdfExtension,
-  sanitizeFilename,
-} from './utils'
-import { extractZipFiles, normalizeZipPath } from './zip'
 
-export interface AppDependencies {
-  convertDocxToPdf: typeof convertDocxToPdf
-  mergePdfFiles: typeof mergePdfFiles
-  fillTemplate: typeof fillTemplate
-  createJobDirectories: typeof createJobDirectories
-  cleanupJob: typeof cleanupJob
-  renderMarkdownToPdf: typeof renderMarkdownToPdf
-  extractZipFiles: typeof extractZipFiles
-}
-
-const defaultDependencies: AppDependencies = {
-  convertDocxToPdf,
-  mergePdfFiles,
-  fillTemplate,
-  createJobDirectories,
-  cleanupJob,
-  renderMarkdownToPdf,
-  extractZipFiles,
-}
-
-export interface AppOptions {
-  delimiterDefaults?: DelimiterDefaults
-}
-
-export function createApp(
-  deps: AppDependencies = defaultDependencies,
-  options: AppOptions = {},
-) {
-  const delimiterDefaults = options.delimiterDefaults ?? loadDelimiterDefaults()
+export function createApp(runtime: AppRuntime, config: RenderSettings) {
   const app = new Hono()
-
   app.get('/healthz', (c) => c.json({ status: 'ok' }))
-
-  app.post('/render', async (c) => {
-    const requestId = crypto.randomUUID()
-    console.info(`[${new Date().toISOString()}] [request:${requestId}] start`)
-
-    const formDataTimeoutMs = Number(process.env.FORMDATA_TIMEOUT_MS ?? 30000)
-    const formData = await withTimeout(
-      c.req.formData(),
-      formDataTimeoutMs,
-      `Multipart parsing timed out after ${formDataTimeoutMs}ms`,
-    )
-    console.info(
-      `[${new Date().toISOString()}] [request:${requestId}] formData parsed`,
-    )
-    const manifestField = formData.get('manifest')
-
-    if (!manifestField) {
-      throw new HTTPException(400, {
-        message: 'Missing "manifest" part in multipart body',
-      })
-    }
-
-    let manifestJson: unknown
-    try {
-      manifestJson = await readManifest(manifestField)
-    } catch (error) {
-      throw new HTTPException(400, {
-        message: 'Manifest must be valid JSON',
-        cause: error,
-      })
-    }
-
-    const parsed = RenderRequestSchema.safeParse(manifestJson)
-    if (!parsed.success) {
-      throw new HTTPException(400, { message: parsed.error.message })
-    }
-    console.info(
-      `[${new Date().toISOString()}] [request:${requestId}] manifest validated`,
-    )
-
-    const job = await deps.createJobDirectories()
-    const globalVariables = parsed.data.variables ?? {}
-    const theme = parsed.data.theme ?? 'default'
-    const pdfPaths: string[] = []
-    const markdownTimeoutMs = Number(process.env.MARKDOWN_TIMEOUT_MS ?? 30000)
-
-    try {
-      for (const [index, spec] of parsed.data.documents.entries()) {
-        const delimiters = resolveDocumentDelimiters(spec, delimiterDefaults)
-        const startedAt = Date.now()
-        console.info(
-          `[${new Date().toISOString()}] [request:${requestId}] [render] start ${index + 1}/${parsed.data.documents.length} ${spec.type}:${spec.field}`,
+  for (const kind of ['multipart', 'zip'] as const) {
+    app.post(kind === 'zip' ? '/render-zip' : '/render', async (c) => {
+      const requestId = crypto.randomUUID()
+      const program = Effect.gen(function* () {
+        const input = yield* parseRequest(
+          c.req.raw,
+          kind,
+          config.formDataTimeoutMs,
         )
-        const filePart = formData.get(spec.field)
-        if (!(filePart instanceof File)) {
-          throw new HTTPException(400, {
-            message: `Missing DOCX file for field "${spec.field}"`,
-          })
-        }
-
-        if (spec.type === 'markdown' || spec.type === 'md') {
-          const markdownInput = await filePart.text()
-          let pdfBytes: Uint8Array
-          try {
-            pdfBytes = await deps.renderMarkdownToPdf(
-              markdownInput,
-              globalVariables,
-              theme,
-              {
-                label: `${spec.field}:${requestId}`,
-                timeoutMs: markdownTimeoutMs,
-                delimiters,
-              },
-            )
-          } catch (error) {
-            throw new HTTPException(400, {
-              message: `Markdown rendering failed for field "${spec.field}"`,
-              cause: error,
-            })
-          }
-          const providedName =
-            spec.filename ?? filePart.name ?? `document-${index + 1}.pdf`
-          const sanitizedName = sanitizeFilename(
-            ensurePdfExtension(providedName),
-          )
-          const pdfPath = join(job.pdf, `${index + 1}-${sanitizedName}`)
-          await writeFile(pdfPath, pdfBytes)
-          pdfPaths.push(pdfPath)
-          console.info(
-            `[${new Date().toISOString()}] [request:${requestId}] [render] done ${spec.type}:${spec.field} in ${Date.now() - startedAt}ms`,
-          )
-        } else {
-          const sourceBuffer = Buffer.from(await filePart.arrayBuffer())
-
-          let renderedBuffer: Buffer
-          try {
-            renderedBuffer = deps.fillTemplate(sourceBuffer, globalVariables, {
-              delimiters,
-            })
-          } catch (error) {
-            throw new HTTPException(400, {
-              message: `Template rendering failed for field "${spec.field}"`,
-              cause: error,
-            })
-          }
-
-          const providedName =
-            spec.filename ?? filePart.name ?? `document-${index + 1}.docx`
-          const sanitizedName = sanitizeFilename(
-            ensureDocxExtension(providedName),
-          )
-          const docxPath = join(job.docx, `${index + 1}-${sanitizedName}`)
-          await writeFile(docxPath, renderedBuffer)
-
-          const pdfPath = await deps.convertDocxToPdf(docxPath, job.pdf)
-          pdfPaths.push(pdfPath)
-          console.info(
-            `[${new Date().toISOString()}] [request:${requestId}] [render] done ${spec.type}:${spec.field} in ${Date.now() - startedAt}ms`,
-          )
-        }
-      }
-
-      console.info(
-        `[${new Date().toISOString()}] [request:${requestId}] [merge] start (${pdfPaths.length} documents)`,
+        const renderer = yield* DocumentRenderer
+        return yield* renderer.render(input)
+      }).pipe(
+        Effect.annotateLogs({ requestId }),
+        Effect.withSpan('http.render'),
       )
-      const mergeTimeoutMs = Number(process.env.MERGE_TIMEOUT_MS ?? 30000)
-      const mergedPdf = await deps.mergePdfFiles(pdfPaths, {
-        timeoutMs: mergeTimeoutMs,
+      const exit = await runtime.runPromiseExit(program, {
+        signal: c.req.raw.signal,
       })
-      const outputName = sanitizeFilename(
-        ensurePdfExtension(parsed.data.outputName ?? 'document.pdf'),
-      )
-      console.info(
-        `[${new Date().toISOString()}] [request:${requestId}] [merge] done`,
-      )
-
-      return new Response(mergedPdf, {
+      if (Exit.isFailure(exit)) return failureResponse(c, exit.cause, requestId)
+      return new Response(exit.value.bytes, {
         headers: {
           'Content-Type': 'application/pdf',
-          'Content-Disposition': `attachment; filename="${outputName}"`,
+          'Content-Disposition': `attachment; filename="${exit.value.filename}"`,
         },
       })
-    } finally {
-      await deps.cleanupJob(job.base)
-      console.info(
-        `[${new Date().toISOString()}] [request:${requestId}] cleanup done`,
-      )
-    }
-  })
-
-  app.post('/render-zip', async (c) => {
-    const requestId = crypto.randomUUID()
-    console.info(`[${new Date().toISOString()}] [request:${requestId}] start`)
-
-    const formDataTimeoutMs = Number(process.env.FORMDATA_TIMEOUT_MS ?? 30000)
-    const formData = await withTimeout(
-      c.req.formData(),
-      formDataTimeoutMs,
-      `Multipart parsing timed out after ${formDataTimeoutMs}ms`,
-    )
-    console.info(
-      `[${new Date().toISOString()}] [request:${requestId}] formData parsed`,
-    )
-
-    const manifestField = formData.get('manifest')
-    if (!manifestField) {
-      throw new HTTPException(400, {
-        message: 'Missing "manifest" part in multipart body',
-      })
-    }
-
-    const archiveField = formData.get('archive')
-    if (!(archiveField instanceof File)) {
-      throw new HTTPException(400, { message: 'Missing "archive" zip file' })
-    }
-
-    let manifestJson: unknown
-    try {
-      manifestJson = await readManifest(manifestField)
-    } catch (error) {
-      throw new HTTPException(400, {
-        message: 'Manifest must be valid JSON',
-        cause: error,
-      })
-    }
-
-    const parsed = RenderZipRequestSchema.safeParse(manifestJson)
-    if (!parsed.success) {
-      throw new HTTPException(400, { message: parsed.error.message })
-    }
-    console.info(
-      `[${new Date().toISOString()}] [request:${requestId}] manifest validated`,
-    )
-
-    const job = await deps.createJobDirectories()
-    const globalVariables = parsed.data.variables ?? {}
-    const theme = parsed.data.theme ?? 'default'
-    const pdfPaths: string[] = []
-    const markdownTimeoutMs = Number(process.env.MARKDOWN_TIMEOUT_MS ?? 30000)
-
-    try {
-      const archiveBuffer = Buffer.from(await archiveField.arrayBuffer())
-      const wantedFiles = parsed.data.documents.map((doc) => doc.file)
-      const { files } = await deps.extractZipFiles(archiveBuffer, wantedFiles)
-
-      for (const [index, spec] of parsed.data.documents.entries()) {
-        const delimiters = resolveDocumentDelimiters(spec, delimiterDefaults)
-        const startedAt = Date.now()
-        console.info(
-          `[${new Date().toISOString()}] [request:${requestId}] [render] start ${index + 1}/${parsed.data.documents.length} ${spec.type}:${spec.file}`,
-        )
-
-        const normalizedName = normalizeZipPath(spec.file)
-        if (!normalizedName) {
-          throw new HTTPException(400, {
-            message: `Invalid file path in manifest: ${spec.file}`,
-          })
-        }
-        const fileBuffer = files.get(normalizedName)
-        if (!fileBuffer) {
-          throw new HTTPException(400, {
-            message: `Missing file "${spec.file}" in zip archive`,
-          })
-        }
-
-        if (spec.type === 'markdown' || spec.type === 'md') {
-          const markdownInput = fileBuffer.toString('utf8')
-          let pdfBytes: Uint8Array
-          try {
-            pdfBytes = await deps.renderMarkdownToPdf(
-              markdownInput,
-              globalVariables,
-              theme,
-              {
-                label: `${spec.file}:${requestId}`,
-                timeoutMs: markdownTimeoutMs,
-                delimiters,
-              },
-            )
-          } catch (error) {
-            throw new HTTPException(400, {
-              message: `Markdown rendering failed for file "${spec.file}"`,
-              cause: error,
-            })
-          }
-          const providedName =
-            spec.filename ?? spec.file ?? `document-${index + 1}.pdf`
-          const sanitizedName = sanitizeFilename(
-            ensurePdfExtension(providedName),
-          )
-          const pdfPath = join(job.pdf, `${index + 1}-${sanitizedName}`)
-          await writeFile(pdfPath, pdfBytes)
-          pdfPaths.push(pdfPath)
-          console.info(
-            `[${new Date().toISOString()}] [request:${requestId}] [render] done ${spec.type}:${spec.file} in ${Date.now() - startedAt}ms`,
-          )
-        } else {
-          let renderedBuffer: Buffer
-          try {
-            renderedBuffer = deps.fillTemplate(fileBuffer, globalVariables, {
-              delimiters,
-            })
-          } catch (error) {
-            throw new HTTPException(400, {
-              message: `Template rendering failed for file "${spec.file}"`,
-              cause: error,
-            })
-          }
-
-          const providedName =
-            spec.filename ?? spec.file ?? `document-${index + 1}.docx`
-          const sanitizedName = sanitizeFilename(
-            ensureDocxExtension(providedName),
-          )
-          const docxPath = join(job.docx, `${index + 1}-${sanitizedName}`)
-          await writeFile(docxPath, renderedBuffer)
-
-          const pdfPath = await deps.convertDocxToPdf(docxPath, job.pdf)
-          pdfPaths.push(pdfPath)
-          console.info(
-            `[${new Date().toISOString()}] [request:${requestId}] [render] done ${spec.type}:${spec.file} in ${Date.now() - startedAt}ms`,
-          )
-        }
-      }
-
-      console.info(
-        `[${new Date().toISOString()}] [request:${requestId}] [merge] start (${pdfPaths.length} documents)`,
-      )
-      const mergeTimeoutMs = Number(process.env.MERGE_TIMEOUT_MS ?? 30000)
-      const mergedPdf = await deps.mergePdfFiles(pdfPaths, {
-        timeoutMs: mergeTimeoutMs,
-      })
-      const outputName = sanitizeFilename(
-        ensurePdfExtension(parsed.data.outputName ?? 'document.pdf'),
-      )
-      console.info(
-        `[${new Date().toISOString()}] [request:${requestId}] [merge] done`,
-      )
-
-      return new Response(mergedPdf, {
-        headers: {
-          'Content-Type': 'application/pdf',
-          'Content-Disposition': `attachment; filename="${outputName}"`,
-        },
-      })
-    } finally {
-      await deps.cleanupJob(job.base)
-      console.info(
-        `[${new Date().toISOString()}] [request:${requestId}] cleanup done`,
-      )
-    }
-  })
-
-  app.onError((err, c) => {
-    console.error(`[${new Date().toISOString()}]`, err)
-    if (err instanceof HTTPException) {
-      return err.getResponse()
-    }
+    })
+  }
+  app.onError((_error, c) => {
+    console.error('Unhandled HTTP adapter defect')
     return c.json({ message: 'Unexpected server error' }, 500)
   })
-
   return app
 }
 
-const app = createApp()
-
-const port = Number(process.env.PORT ?? 3000)
-
-export default {
-  port,
-  fetch: app.fetch,
+function parseRequest(
+  request: Request,
+  kind: 'multipart' | 'zip',
+  timeoutMs: number,
+): Effect.Effect<RenderInput, RenderError> {
+  return Effect.gen(function* () {
+    // Reading through an owned reader lets interruption stop body consumption.
+    // Request.formData() itself exposes no abort option once parsing has begun.
+    // Bun lazily serializes FormData; capture its boundary before reading .body.
+    const headers = new Headers(request.headers)
+    const form = yield* deadline(
+      Effect.gen(function* () {
+        const bytes = yield* readBody(request)
+        return yield* Effect.tryPromise({
+          try: () => new Response(bytes, { headers }).formData(),
+          catch: (cause) =>
+            new InvalidInput({ message: 'Invalid multipart body', cause }),
+        })
+      }),
+      'multipart',
+      timeoutMs,
+    )
+    const manifest = form.get('manifest')
+    if (!manifest)
+      return yield* Effect.fail(
+        new InvalidInput({
+          message: 'Missing "manifest" part in multipart body',
+        }),
+      )
+    const json: unknown = yield* Effect.tryPromise({
+      try: async () =>
+        JSON.parse(
+          typeof manifest === 'string' ? manifest : await manifest.text(),
+        ),
+      catch: (cause) =>
+        new InvalidInput({ message: 'Manifest must be valid JSON', cause }),
+    })
+    if (kind === 'zip') {
+      const file = form.get('archive')
+      if (!(file instanceof File))
+        return yield* Effect.fail(
+          new InvalidInput({ message: 'Missing "archive" zip file' }),
+        )
+      const parsed = RenderZipRequestSchema.safeParse(json)
+      if (!parsed.success)
+        return yield* Effect.fail(
+          new InvalidInput({ message: parsed.error.message }),
+        )
+      const archive = yield* Effect.tryPromise({
+        try: async () => Buffer.from(await file.arrayBuffer()),
+        catch: (cause) =>
+          new InvalidInput({ message: 'Unable to read archive', cause }),
+      })
+      return {
+        ...parsed.data,
+        documents: parsed.data.documents.map((spec) => ({
+          ...spec,
+          reference: spec.file,
+        })),
+        source: { kind: 'zip', archive },
+      }
+    }
+    const parsed = RenderRequestSchema.safeParse(json)
+    if (!parsed.success)
+      return yield* Effect.fail(
+        new InvalidInput({ message: parsed.error.message }),
+      )
+    const files = new Map<string, File>()
+    for (const spec of parsed.data.documents) {
+      const part = form.get(spec.field)
+      if (part instanceof File) files.set(spec.field, part)
+    }
+    return {
+      ...parsed.data,
+      documents: parsed.data.documents.map((spec) => ({
+        ...spec,
+        reference: spec.field,
+      })),
+      source: { kind: 'multipart', files },
+    }
+  })
 }
 
-async function withTimeout<T>(
-  promise: Promise<T>,
-  timeoutMs: number,
-  message: string,
-): Promise<T> {
-  if (!timeoutMs || timeoutMs <= 0) {
-    return promise
-  }
+function readBody(request: Request) {
+  return Effect.scoped(
+    Effect.gen(function* () {
+      const body = request.body
+      if (!body) return new Uint8Array()
+      const reader = yield* Effect.acquireRelease(
+        Effect.sync(() => body.getReader()),
+        (reader) =>
+          Effect.promise(async () => {
+            try {
+              await reader.cancel()
+            } finally {
+              reader.releaseLock()
+            }
+          }),
+      )
+      const chunks: Uint8Array[] = []
+      while (true) {
+        const next = yield* Effect.tryPromise({
+          try: () => reader.read(),
+          catch: (cause) =>
+            new InvalidInput({ message: 'Unable to read request body', cause }),
+        })
+        if (next.done) break
+        chunks.push(next.value)
+      }
+      return Buffer.concat(chunks)
+    }),
+  )
+}
 
-  let timeoutId: ReturnType<typeof setTimeout> | undefined
-  const timeoutPromise = new Promise<never>((_, reject) => {
-    timeoutId = setTimeout(() => reject(new Error(message)), timeoutMs)
+function failureResponse(
+  c: Context,
+  cause: Cause.Cause<RenderError>,
+  requestId: string,
+) {
+  // Never print raw causes: library errors can contain uploaded document data.
+  console.error('Render request failed', {
+    requestId,
+    reasons: cause.reasons.map((reason) => {
+      if (reason._tag !== 'Fail') return { category: reason._tag }
+      const error = reason.error
+      return {
+        category: error._tag,
+        ...('stage' in error ? { stage: error.stage } : {}),
+        ...('operation' in error ? { operation: error.operation } : {}),
+      }
+    }),
   })
-
-  try {
-    return await Promise.race([promise, timeoutPromise])
-  } finally {
-    if (timeoutId) {
-      clearTimeout(timeoutId)
+  if (Cause.hasDies(cause))
+    return c.json({ message: 'Unexpected server error' }, 500)
+  if (Cause.hasInterruptsOnly(cause)) return new Response(null, { status: 499 })
+  for (const reason of cause.reasons) {
+    if (!Cause.isFailReason(reason)) continue
+    const error = reason.error
+    switch (error._tag) {
+      case 'InvalidInput':
+      case 'InvalidArchive':
+      case 'MissingDocument':
+      case 'TemplateError':
+        return c.text(error.message, 400)
+      case 'RenderTimeout':
+        return c.json({ message: `Rendering timed out at ${error.stage}` }, 504)
+      case 'ConversionError':
+      case 'WorkspaceError':
+        return c.json({ message: 'Unexpected server error' }, 500)
     }
   }
-}
-
-async function readManifest(value: string | File): Promise<unknown> {
-  if (typeof value === 'string') {
-    return JSON.parse(value)
-  }
-
-  if (value instanceof File) {
-    return JSON.parse(await value.text())
-  }
-
-  throw new Error('Unsupported manifest field type')
+  return c.json({ message: 'Unexpected server error' }, 500)
 }

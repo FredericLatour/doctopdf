@@ -363,14 +363,24 @@ Optional environment variables:
 | `DOCX_DELIMITER_END` | unset (uses `}`) | Closing DOCX delimiter; set together with `DOCX_DELIMITER_START`. |
 | `MARKDOWN_DELIMITER_START` | unset (uses `{{`) | Opening Markdown delimiter; set together with `MARKDOWN_DELIMITER_END`. |
 | `MARKDOWN_DELIMITER_END` | unset (uses `}}`) | Closing Markdown delimiter; set together with `MARKDOWN_DELIMITER_START`. |
-| `FORMDATA_TIMEOUT_MS` | `30000` | Timeout for multipart parsing. |
-| `MARKDOWN_TIMEOUT_MS` | `30000` | Timeout for Markdown HTML rendering and PDF generation. |
+| `FORMDATA_TIMEOUT_MS` | `30000` | Budget for reading and parsing the multipart body; `0` disables it. |
+| `MARKDOWN_TIMEOUT_MS` | `30000` | Budget for page creation, HTML loading, and PDF generation after acquiring the browser; `0` disables it. Browser launch/connect each use this timeout, or 30 seconds when disabled. |
 | `MARKDOWN_WAIT_UNTIL` | `domcontentloaded` | Playwright wait condition: `load`, `domcontentloaded`, or `networkidle`. |
-| `MARKDOWN_IDLE_MS` | unset | Idle timeout before the shared Chromium instance is closed. |
+| `MARKDOWN_IDLE_MS` | `0` | Close Chromium after this idle period, measured from the last completed render. `0` keeps it until shutdown. |
 | `MARKDOWN_CLOSE_TIMEOUT_MS` | `5000` | Timeout for closing Chromium cleanly. |
 | `MARKDOWN_DEBUG` | unset | Set to `1` to log Markdown rendering phases. |
 | `MARKDOWN_MAX_CHARS` | unset | Reject Markdown input longer than this value. |
-| `MERGE_TIMEOUT_MS` | `30000` | Timeout for PDF merge work. |
+| `MERGE_TIMEOUT_MS` | `30000` | Budget for the complete merge; `0` disables it. See cancellation limitations below. |
+| `DOCX_TIMEOUT_MS` | `60000` | Positive timeout for each LibreOffice conversion after acquiring its concurrency permit. |
+| `SHUTDOWN_TIMEOUT_MS` | `10000` | Positive drain period before shutdown interrupts remaining requests. |
+
+Configuration is validated once at startup. Numeric settings must be nonnegative integers (port: 0–65535); close, DOCX, and shutdown timeouts must be positive. Invalid numbers, wait conditions, or incomplete delimiter pairs stop startup. Bun continues to load `.env` files.
+
+Documents render sequentially in manifest order. Across requests, Chromium renders and LibreOffice conversions each have one concurrency permit. The converter service owns an isolated LibreOffice profile, reused under its single permit and removed on shutdown. This prevents conversion being forwarded to an unrelated process while avoiding profile initialization on every request.
+
+Client disconnects interrupt their request effects. Scoped cleanup closes pages, stops conversion process groups, and removes job directories. SIGINT/SIGTERM stop intake, allow the configured drain period, then interrupt outstanding jobs and dispose shared services. Chromium starts lazily and can be relaunched after failure or cancellation.
+
+Timeouts are operation budgets, not hard wall-clock response guarantees: queued work waits for a permit, cleanup takes additional time, and local filesystem operations are awaited before deleting their paths. PDF merging and synchronous template/Markdown work cannot be preempted while JavaScript is executing; strict CPU deadlines would require worker isolation. Requests, ZIP inputs, and selected ZIP entries are still buffered in memory.
 
 ## Error behavior
 
@@ -387,4 +397,14 @@ Common request failures include:
 - invalid zip paths
 - Markdown rendering or Chromium failures
 
-Client-side input problems generally return `400`. Unexpected internal failures return `500`.
+Client input, invalid archives, missing files, and DOCX template errors return `400` with a text message. Infrastructure failures (including Chromium/LibreOffice failures and missing theme assets), unexpected defects, and cleanup failures return `500` with a generic JSON message. Typed operation timeouts return `504` with a JSON message naming the stage. Interruption uses an empty `499` response if the connection is still writable; disconnected clients usually receive no response.
+
+These classifications intentionally differ from the previous implementation: Chromium failures are no longer reported as client errors, malformed ZIPs are client errors, and operation timeouts have a dedicated status. Original error causes remain available inside the Effect failure, but logs only contain safe error categories/stages and request/document identifiers, never uploaded content or variable values.
+
+## Application architecture
+
+Hono owns HTTP parsing, Zod validation, and response/error mapping in [`src/index.ts`](src/index.ts). [`src/render.ts`](src/render.ts) contains the shared `DocumentRenderer` pipeline. `DocxRenderer`, `MarkdownRenderer`, `Browser`, `ZipReader`, `PdfMerger`, and `JobWorkspace` expose typed Effect methods and are assembled with explicit layers in [`src/runtime.ts`](src/runtime.ts).
+
+[`src/main.ts`](src/main.ts) validates configuration and starts the application; [`src/server.ts`](src/server.ts) owns the server's drain/disposal lifecycle. One `ManagedRuntime` owns shared services. Job workspaces belong to request scopes, and foreign asynchronous adapters await cancellation cleanup before releasing their scope or concurrency permit.
+
+Tests replace services with `Layer.succeed`, keeping fast HTTP tests independent of external renderers. See [`tests/app.ts`](tests/app.ts) for test-layer composition. Run `bun run check`, `bun run typecheck`, and `bun run test:fast`; `bun run test:e2e` additionally exercises real rendering, process/browser cancellation, HTTP disconnects, and shutdown in Docker.

@@ -16,6 +16,8 @@ export function fillTemplate(
 ): Buffer {
   const zip = new PizZip(template)
   const doc = new Docxtemplater(zip, {
+    // Library diagnostics may embed template XML and variable values.
+    errorLogging: false,
     paragraphLoop: true,
     linebreaks: true,
     delimiters: { ...(options.delimiters ?? DEFAULT_DELIMITERS.docx) },
@@ -25,7 +27,9 @@ export function fillTemplate(
     doc.render(variables ?? {})
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
-    throw new Error(`DOCX template rendering failed: ${message}`)
+    throw new Error(`DOCX template rendering failed: ${message}`, {
+      cause: error,
+    })
   }
 
   return doc.getZip().generate({ type: 'nodebuffer' })

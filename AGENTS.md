@@ -6,17 +6,20 @@ Write clear, cohesive, maintainable code. Prefer the simplest design that fully 
 
 `doctopdf` is a Bun and Hono service that renders DOCX and Markdown documents, merges PDFs in manifest order, and returns the result.
 
-- `src/index.ts`: HTTP application, request handling, and pipeline orchestration; `createApp` accepts dependencies for integration tests.
+- `src/index.ts`: Hono parsing, Zod validation, and HTTP error mapping; `createApp` accepts a managed runtime and configuration.
+- `src/render.ts`: shared Effect rendering pipeline. `src/runtime.ts`: service-layer composition.
+- `src/config.ts` and `src/errors.ts`: startup settings and tagged domain failures.
+- `src/main.ts` and `src/server.ts`: startup and bounded shutdown.
 - `src/types.ts`: Zod request schemas and their inferred TypeScript types.
 - `src/template.ts` and `src/libreoffice.ts`: DOCX templating and conversion.
-- `src/markdown.ts` and `src/theme.ts`: Markdown rendering, Chromium lifecycle, and HTML theme expansion.
+- `src/markdown.ts` and `src/theme.ts`: Markdown rendering and HTML theme expansion. `src/browser.ts`: scoped Chromium lifecycle.
 - `src/pdf.ts`, `src/temp.ts`, `src/zip.ts`, and `src/utils.ts`: PDF merging, job directories, archive handling, and filename helpers.
 - `themes/`: HTML and CSS assets. `tests/`: unit, HTTP integration, and Docker end-to-end coverage.
 
 ## Code design
 
 - Keep functions and modules focused on one responsibility. Use names that explain the domain and purpose.
-- Keep HTTP handlers focused on parsing, validation, orchestration, and responses. Put reusable rendering and file-processing behavior in domain modules that do not depend on Hono.
+- Keep HTTP handlers focused on parsing, validation, and responses. Domain services return typed Effects and do not depend on Hono; compose services with explicit layers.
 - Share behavior used by both upload endpoints through focused helpers. Keep format-specific behavior close to its renderer.
 - Introduce abstractions when they simplify an actual use case. Avoid speculative frameworks, generic factories, and unnecessary class hierarchies.
 - Prefer explicit inputs and typed options objects as configuration grows. Resolve configuration at a clear boundary and pass the effective options to the code that needs them.
@@ -59,7 +62,7 @@ bun run test:fast
 ```
 
 - Add focused tests for new behavior and regressions. Assert observable outcomes, including relevant error paths, rather than private implementation details.
-- Keep unit and HTTP integration tests independent of LibreOffice and Chromium. Use the existing dependency injection and test helpers.
+- Keep unit and HTTP integration tests independent of LibreOffice and Chromium. Substitute service layers using `tests/app.ts`; dispose test runtimes.
 - Run `bun run test:e2e` when changes affect actual rendering, PDF merging, external conversion tools, or the Docker image. It builds and runs Docker containers.
 - Edit DOCX fixture source XML under `tests/fixtures/docx-src/`, then regenerate with `bun run fixtures:generate`.
 - For documentation-only changes, review accuracy and the diff; runtime tests are unnecessary unless executable behavior changes.
