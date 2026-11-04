@@ -2,7 +2,6 @@ import { Buffer } from 'node:buffer'
 import { join } from 'node:path'
 import { Context, Effect, Layer } from 'effect'
 import { RenderConfig } from '../app/config'
-import { resolveDocumentDelimiters } from '../documents/delimiters'
 import {
   ensureDocxExtension,
   ensurePdfExtension,
@@ -92,10 +91,8 @@ export class DocumentRenderer extends Context.Service<
                           }),
                       })
                     : source
-                const delimiters = resolveDocumentDelimiters(
-                  spec,
-                  config.delimiters,
-                )
+                const format = spec.type === 'docx' ? 'docx' : 'markdown'
+                const delimiters = spec.delimiters ?? config.delimiters[format]
                 const name = spec.filename ?? file?.name ?? spec.reference
                 const stem = `${index + 1}-${sanitizeFilename(spec.type === 'docx' ? ensureDocxExtension(name) : ensurePdfExtension(name))}`
                 yield* Effect.logInfo('Rendering document').pipe(

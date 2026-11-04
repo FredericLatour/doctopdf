@@ -374,7 +374,7 @@ Optional environment variables:
 | `DOCX_TIMEOUT_MS` | `60000` | Positive timeout for each LibreOffice conversion after acquiring its concurrency permit. |
 | `SHUTDOWN_TIMEOUT_MS` | `10000` | Positive drain period before shutdown interrupts remaining requests. |
 
-Configuration is validated once at startup. Numeric settings must be nonnegative integers (port: 0–65535); close, DOCX, and shutdown timeouts must be positive. Invalid numbers, wait conditions, or incomplete delimiter pairs stop startup. Bun continues to load `.env` files.
+The `RenderConfig` service loads and validates configuration once at startup using Effect Config. Numeric settings must be nonnegative integers (port: 0–65535); close, DOCX, and shutdown timeouts must be positive. Invalid numbers, wait conditions, or incomplete delimiter pairs stop startup with a typed configuration error. Bun continues to load `.env` files.
 
 Documents render sequentially in manifest order. Across requests, Chromium renders and LibreOffice conversions each have one concurrency permit. The converter service owns an isolated LibreOffice profile, reused under its single permit and removed on shutdown. This prevents conversion being forwarded to an unrelated process while avoiding profile initialization on every request.
 
@@ -410,7 +410,7 @@ src/
 ├── main.ts                      # Entrypoint and shutdown signals
 ├── errors.ts                    # Tagged failures and deadline handling
 ├── app/
-│   ├── config.ts                # Validated startup settings
+│   ├── config.ts                # Effect configuration service and defaults
 │   └── runtime.ts               # Effect layer composition
 ├── http/
 │   ├── app.ts                   # Hono routes and HTTP error mapping
@@ -426,7 +426,6 @@ src/
 │   └── cancellation.ts          # Cancellation support for async adapters
 └── documents/
     ├── schemas.ts              # Zod request schemas and inferred types
-    ├── delimiters.ts
     ├── docx-template.ts
     ├── theme.ts
     └── filenames.ts
@@ -434,6 +433,6 @@ src/
 
 Hono owns HTTP parsing, Zod validation, and response/error mapping in [`src/http/app.ts`](src/http/app.ts). [`src/services/document-renderer.ts`](src/services/document-renderer.ts) contains the shared `DocumentRenderer` pipeline. `DocxRenderer`, `MarkdownRenderer`, `Browser`, `ZipReader`, `PdfMerger`, and `JobWorkspace` expose typed Effect methods and are assembled with explicit layers in [`src/app/runtime.ts`](src/app/runtime.ts).
 
-[`src/main.ts`](src/main.ts) validates configuration and starts the application; [`src/http/server.ts`](src/http/server.ts) owns the server's drain/disposal lifecycle. One `ManagedRuntime` owns shared services. Job workspaces belong to request scopes, and foreign asynchronous adapters await cancellation cleanup before releasing their scope or concurrency permit.
+[`src/main.ts`](src/main.ts) starts the application; [`src/http/server.ts`](src/http/server.ts) initializes the runtime before listening and owns the server's drain/disposal lifecycle. One `ManagedRuntime` owns shared services, including `RenderConfig`. Its live layer defines environment validation and defaults, with an environment `ConfigProvider` that preserves empty values for validation. Delimiter pairs are resolved once per document from its override or the configured format defaults, then passed explicitly to template helpers. Job workspaces belong to request scopes, and foreign asynchronous adapters await cancellation cleanup before releasing their scope or concurrency permit.
 
-Tests replace services with `Layer.succeed`, keeping fast HTTP tests independent of external renderers. See [`tests/app.ts`](tests/app.ts) for test-layer composition. Run `bun run check`, `bun run typecheck`, and `bun run test:fast`; `bun run test:e2e` additionally exercises real rendering, process/browser cancellation, HTTP disconnects, and shutdown in Docker.
+Tests replace services with `Layer.succeed`, keeping fast HTTP tests independent of external renderers. See [`tests/app.ts`](tests/app.ts) for test-layer composition and [`tests/config.ts`](tests/config.ts) for loading the live configuration layer with an isolated provider. Run `bun run check`, `bun run typecheck`, and `bun run test:fast`; `bun run test:e2e` additionally exercises real rendering, process/browser cancellation, HTTP disconnects, and shutdown in Docker.

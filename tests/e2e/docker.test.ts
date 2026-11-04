@@ -389,13 +389,23 @@ describe('docker e2e', () => {
     }
   }, 120000)
 
-  test('incomplete environment delimiters stop the service at startup', async () => {
-    await expect(
-      runDocker(['run', '--rm', '-e', 'DOCX_DELIMITER_START=[[', imageTag]),
-    ).rejects.toThrow(
-      'DOCX_DELIMITER_START and DOCX_DELIMITER_END must both be set to nonempty strings',
-    )
-  }, 120000)
+  test.each([
+    ['incomplete', ['DOCX_DELIMITER_START=[[']],
+    ['empty', ['DOCX_DELIMITER_START=', 'DOCX_DELIMITER_END=']],
+  ] as const)(
+    '%s environment delimiters stop the service at startup',
+    async (_name, environment) => {
+      await expect(
+        runDocker([
+          'run',
+          '--rm',
+          ...environment.flatMap((value) => ['-e', value]),
+          imageTag,
+        ]),
+      ).rejects.toThrow('DELIMITER')
+    },
+    120000,
+  )
   test('real Chromium cancels stalled pages, recovers, and closes when idle', async () => {
     const script = (
       await Bun.file(join(repoRoot, 'tests/e2e/probes/browser.ts')).text()

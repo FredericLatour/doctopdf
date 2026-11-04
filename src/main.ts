@@ -1,9 +1,7 @@
-import { loadConfig } from './app/config'
 import { makeRuntime } from './app/runtime'
 import { startServer } from './http/server'
 
-const config = loadConfig()
-const { shutdown } = await startServer(makeRuntime(config), config)
+const { shutdown, config } = await startServer(makeRuntime())
 let stopping = false
 const onSignal = () => {
   if (stopping) return

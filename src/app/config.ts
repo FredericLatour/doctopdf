@@ -1,54 +1,72 @@
-import { Context, Layer } from 'effect'
-import { z } from 'zod'
-import {
-  type DelimiterDefaults,
-  loadDelimiterDefaults,
-} from '../documents/delimiters'
+import { Config, Context, Layer, Schema } from 'effect'
 
-const nonnegative = z.coerce.number().int().min(0).max(2_147_483_647)
-const settings = z.object({
-  PORT: z.coerce.number().int().min(0).max(65535).default(3000),
-  FORMDATA_TIMEOUT_MS: nonnegative.default(30000),
-  MARKDOWN_TIMEOUT_MS: nonnegative.default(30000),
-  MARKDOWN_CLOSE_TIMEOUT_MS: nonnegative.min(1).default(5000),
-  MARKDOWN_IDLE_MS: nonnegative.default(0),
-  MARKDOWN_MAX_CHARS: nonnegative.default(0),
-  MARKDOWN_WAIT_UNTIL: z
-    .enum(['load', 'domcontentloaded', 'networkidle'])
-    .default('domcontentloaded'),
-  MARKDOWN_DEBUG: z.string().optional(),
-  CHROMIUM_PATH: z.string().optional(),
-  MERGE_TIMEOUT_MS: nonnegative.default(30000),
-  DOCX_TIMEOUT_MS: nonnegative.min(1).default(60000),
-  SHUTDOWN_TIMEOUT_MS: nonnegative.min(1).default(10000),
+const nonnegative = Schema.Int.check(
+  Schema.isBetween({ minimum: 0, maximum: 2_147_483_647 }),
+)
+const positive = nonnegative.check(Schema.isGreaterThan(0))
+const delimiterPair = Schema.Struct({
+  START: Schema.NonEmptyString,
+  END: Schema.NonEmptyString,
+})
+const settings = Config.all({
+  port: Config.schema(
+    Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 65535 })),
+    'PORT',
+  ).pipe(Config.withDefault(3000)),
+  formDataTimeoutMs: Config.schema(nonnegative, 'FORMDATA_TIMEOUT_MS').pipe(
+    Config.withDefault(30000),
+  ),
+  markdownTimeoutMs: Config.schema(nonnegative, 'MARKDOWN_TIMEOUT_MS').pipe(
+    Config.withDefault(30000),
+  ),
+  closeTimeoutMs: Config.schema(positive, 'MARKDOWN_CLOSE_TIMEOUT_MS').pipe(
+    Config.withDefault(5000),
+  ),
+  idleMs: Config.schema(nonnegative, 'MARKDOWN_IDLE_MS').pipe(
+    Config.withDefault(0),
+  ),
+  maxChars: Config.schema(nonnegative, 'MARKDOWN_MAX_CHARS').pipe(
+    Config.withDefault(0),
+  ),
+  waitUntil: Config.Literals(
+    ['load', 'domcontentloaded', 'networkidle'],
+    'MARKDOWN_WAIT_UNTIL',
+  ).pipe(Config.withDefault('domcontentloaded')),
+  markdownDebug: Config.String('MARKDOWN_DEBUG').pipe(
+    Config.withDefault(''),
+    Config.map((value) => value === '1'),
+  ),
+  chromiumPath: Config.String('CHROMIUM_PATH').pipe(
+    Config.withDefault(''),
+    Config.map((value) => value || undefined),
+  ),
+  mergeTimeoutMs: Config.schema(nonnegative, 'MERGE_TIMEOUT_MS').pipe(
+    Config.withDefault(30000),
+  ),
+  docxTimeoutMs: Config.schema(positive, 'DOCX_TIMEOUT_MS').pipe(
+    Config.withDefault(60000),
+  ),
+  shutdownTimeoutMs: Config.schema(positive, 'SHUTDOWN_TIMEOUT_MS').pipe(
+    Config.withDefault(10000),
+  ),
+  delimiters: Config.all({
+    // Struct validation rejects partial pairs; Config.all would default them.
+    docx: Config.schema(delimiterPair, ['DOCX', 'DELIMITER']).pipe(
+      Config.map(({ START, END }) => ({ start: START, end: END })),
+      Config.withDefault({ start: '{', end: '}' }),
+    ),
+    markdown: Config.schema(delimiterPair, ['MARKDOWN', 'DELIMITER']).pipe(
+      Config.map(({ START, END }) => ({ start: START, end: END })),
+      Config.withDefault({ start: '{{', end: '}}' }),
+    ),
+  }),
 })
 
-export function loadConfig(
-  environment: Record<string, string | undefined> = process.env,
-  delimiterDefaults?: DelimiterDefaults,
-) {
-  const env = settings.parse(environment)
-  return {
-    port: env.PORT,
-    formDataTimeoutMs: env.FORMDATA_TIMEOUT_MS,
-    markdownTimeoutMs: env.MARKDOWN_TIMEOUT_MS,
-    closeTimeoutMs: env.MARKDOWN_CLOSE_TIMEOUT_MS,
-    idleMs: env.MARKDOWN_IDLE_MS,
-    maxChars: env.MARKDOWN_MAX_CHARS,
-    waitUntil: env.MARKDOWN_WAIT_UNTIL,
-    markdownDebug: env.MARKDOWN_DEBUG === '1',
-    chromiumPath: env.CHROMIUM_PATH || undefined,
-    mergeTimeoutMs: env.MERGE_TIMEOUT_MS,
-    docxTimeoutMs: env.DOCX_TIMEOUT_MS,
-    shutdownTimeoutMs: env.SHUTDOWN_TIMEOUT_MS,
-    delimiters: delimiterDefaults ?? loadDelimiterDefaults(environment),
-  }
-}
-export type RenderSettings = ReturnType<typeof loadConfig>
+export type RenderSettings = Config.Success<typeof settings>
+
 export class RenderConfig extends Context.Service<
   RenderConfig,
   RenderSettings
 >()('doctopdf/RenderConfig') {
-  static layer = (settings: RenderSettings) =>
-    Layer.succeed(RenderConfig, settings)
+  static layer = Layer.effect(RenderConfig, settings)
 }

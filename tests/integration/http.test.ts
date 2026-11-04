@@ -2,13 +2,12 @@ import { describe, expect, test } from 'bun:test'
 import { join, parse } from 'node:path'
 import { Effect, Exit } from 'effect'
 import PizZip from 'pizzip'
-import { loadConfig } from '../../src/app/config'
-import { loadDelimiterDefaults } from '../../src/documents/delimiters'
 import { fillTemplate } from '../../src/documents/docx-template'
 import { ConversionError, InvalidInput, RenderTimeout } from '../../src/errors'
 import { DocumentRenderer } from '../../src/services/document-renderer'
 import { renderMarkdownToHtml } from '../../src/services/markdown-renderer'
 import { makeTestApp } from '../app'
+import { testConfig } from '../config'
 import {
   cleanupDir,
   createPdfBytes,
@@ -137,15 +136,12 @@ describe('http service', () => {
               return createPdfBytes(['Markdown page'])
             }),
         },
-        config: loadConfig(
-          {},
-          loadDelimiterDefaults({
-            DOCX_DELIMITER_START: '[',
-            DOCX_DELIMITER_END: ']',
-            MARKDOWN_DELIMITER_START: '[[',
-            MARKDOWN_DELIMITER_END: ']]',
-          }),
-        ),
+        config: testConfig({
+          DOCX_DELIMITER_START: '[',
+          DOCX_DELIMITER_END: ']',
+          MARKDOWN_DELIMITER_START: '[[',
+          MARKDOWN_DELIMITER_END: ']]',
+        }),
       })
       const docxEnvironment = { start: '[', end: ']' }
       const docxOverride = { start: '<%', end: '%>' }
@@ -400,7 +396,7 @@ describe('HTTP failure boundary', () => {
       },
     })
     const { app } = makeTestApp({
-      config: loadConfig({ FORMDATA_TIMEOUT_MS: '10' }),
+      config: testConfig({ FORMDATA_TIMEOUT_MS: '10' }),
     })
     const response = await app.request('/render', {
       method: 'POST',

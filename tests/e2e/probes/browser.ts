@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert'
 import { readdir, readlink } from 'node:fs/promises'
-import { Exit, Layer, ManagedRuntime } from 'effect'
-import { loadConfig, RenderConfig } from '../../../src/app/config'
+import { ConfigProvider, Exit, Layer, ManagedRuntime } from 'effect'
+import { RenderConfig } from '../../../src/app/config'
 import { Browser } from '../../../src/services/browser'
 
 async function chromiumProcesses() {
@@ -13,14 +13,20 @@ async function chromiumProcesses() {
   return processes
 }
 const before = new Set(await chromiumProcesses())
-const config = loadConfig({
-  CHROMIUM_PATH: '/usr/bin/chromium',
-  MARKDOWN_TIMEOUT_MS: '2000',
-  MARKDOWN_CLOSE_TIMEOUT_MS: '100',
-  MARKDOWN_IDLE_MS: '100',
+const provider = ConfigProvider.fromEnv({
+  preserveEmptyStrings: true,
+  env: {
+    CHROMIUM_PATH: '/usr/bin/chromium',
+    MARKDOWN_TIMEOUT_MS: '2000',
+    MARKDOWN_CLOSE_TIMEOUT_MS: '100',
+    MARKDOWN_IDLE_MS: '100',
+  },
 })
 const runtime = ManagedRuntime.make(
-  Browser.layer.pipe(Layer.provide(RenderConfig.layer(config))),
+  Browser.layer.pipe(
+    Layer.provide(RenderConfig.layer),
+    Layer.provide(ConfigProvider.layer(provider)),
+  ),
 )
 const render = (html: string) => Browser.use((browser) => browser.render(html))
 try {

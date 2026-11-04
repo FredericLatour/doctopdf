@@ -2,12 +2,15 @@ import { describe, expect, test } from 'bun:test'
 import PizZip from 'pizzip'
 
 import { fillTemplate } from '../../src/documents/docx-template'
+import { testConfig } from '../config'
 import { docxWithDelimiters, fixtureBytes } from '../helpers'
+
+const defaults = { delimiters: testConfig().delimiters.docx }
 
 describe('fillTemplate', () => {
   test('renders the simple docx fixture', async () => {
     const input = Buffer.from(await fixtureBytes('simple-template.docx'))
-    const output = fillTemplate(input, { title: 'Quarterly Review' })
+    const output = fillTemplate(input, { title: 'Quarterly Review' }, defaults)
 
     const zip = new PizZip(output)
     const documentXml = zip.file('word/document.xml')?.asText()
@@ -18,11 +21,15 @@ describe('fillTemplate', () => {
 
   test('renders multiple fields in the docx fixture', async () => {
     const input = Buffer.from(await fixtureBytes('multi-field-template.docx'))
-    const output = fillTemplate(input, {
-      title: 'Quarterly Review',
-      subtitle: 'Q1 2026',
-      customerName: 'Acme',
-    })
+    const output = fillTemplate(
+      input,
+      {
+        title: 'Quarterly Review',
+        subtitle: 'Q1 2026',
+        customerName: 'Acme',
+      },
+      defaults,
+    )
 
     const zip = new PizZip(output)
     const documentXml = zip.file('word/document.xml')?.asText()
@@ -64,6 +71,7 @@ describe('fillTemplate', () => {
     const output = fillTemplate(
       Buffer.from(await fixtureBytes('simple-template.docx')),
       { title: 'Default still works' },
+      defaults,
     )
 
     expect(new PizZip(output).file('word/document.xml')?.asText()).toContain(

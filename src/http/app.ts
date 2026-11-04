@@ -1,7 +1,7 @@
 import { Buffer } from 'node:buffer'
-import { Cause, Effect, Exit } from 'effect'
+import { Cause, type Config, Effect, Exit } from 'effect'
 import { type Context, Hono } from 'hono'
-import type { RenderSettings } from '../app/config'
+import { RenderConfig } from '../app/config'
 import type { AppRuntime } from '../app/runtime'
 import {
   RenderRequestSchema,
@@ -13,13 +13,14 @@ import {
   type RenderInput,
 } from '../services/document-renderer'
 
-export function createApp(runtime: AppRuntime, config: RenderSettings) {
+export function createApp(runtime: AppRuntime) {
   const app = new Hono()
   app.get('/healthz', (c) => c.json({ status: 'ok' }))
   for (const kind of ['multipart', 'zip'] as const) {
     app.post(kind === 'zip' ? '/render-zip' : '/render', async (c) => {
       const requestId = crypto.randomUUID()
       const program = Effect.gen(function* () {
+        const config = yield* RenderConfig
         const input = yield* parseRequest(
           c.req.raw,
           kind,
@@ -166,7 +167,7 @@ function readBody(request: Request) {
 
 function failureResponse(
   c: Context,
-  cause: Cause.Cause<RenderError>,
+  cause: Cause.Cause<RenderError | Config.ConfigError>,
   requestId: string,
 ) {
   // Never print raw causes: library errors can contain uploaded document data.

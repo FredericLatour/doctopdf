@@ -2,7 +2,10 @@ import { describe, expect, test } from 'bun:test'
 import { join } from 'node:path'
 
 import { renderMarkdownToHtml } from '../../src/services/markdown-renderer'
+import { testConfig } from '../config'
 import { repoRoot } from '../helpers'
+
+const defaults = { delimiters: testConfig().delimiters.markdown }
 
 describe('Markdown templating', () => {
   test('preserves automatic links, typography, and raw HTML', async () => {
@@ -10,6 +13,7 @@ describe('Markdown templating', () => {
       'example.com\n\nhttps://example.org\n\n"Quoted"...\n\n<strong>Raw HTML</strong>',
       {},
       'default',
+      defaults,
     )
 
     expect(html).toContain('<a href="http://example.com">example.com</a>')
@@ -25,6 +29,7 @@ describe('Markdown templating', () => {
       '# {{ title }}\n\nMissing=[{{missing}}], Null=[{{nil}}], Zero=[{{zero}}], False=[{{no}}].\n\n{title}',
       { title: 'Quarterly Review', nil: null, zero: 0, no: false },
       'default',
+      defaults,
     )
 
     expect(html).toContain('<h1>Quarterly Review</h1>')

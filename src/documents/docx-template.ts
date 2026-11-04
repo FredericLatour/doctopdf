@@ -2,17 +2,16 @@ import type { Buffer } from 'node:buffer'
 import Docxtemplater from 'docxtemplater'
 import PizZip from 'pizzip'
 
-import { DEFAULT_DELIMITERS } from './delimiters'
 import type { Delimiters } from './schemas'
 
 export interface TemplateOptions {
-  delimiters?: Delimiters
+  delimiters: Delimiters
 }
 
 export function fillTemplate(
   template: Buffer,
   variables: Record<string, unknown>,
-  options: TemplateOptions = {},
+  options: TemplateOptions,
 ): Buffer {
   const zip = new PizZip(template)
   const doc = new Docxtemplater(zip, {
@@ -20,7 +19,7 @@ export function fillTemplate(
     errorLogging: false,
     paragraphLoop: true,
     linebreaks: true,
-    delimiters: { ...(options.delimiters ?? DEFAULT_DELIMITERS.docx) },
+    delimiters: { ...options.delimiters },
   })
 
   try {

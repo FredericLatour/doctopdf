@@ -1,4 +1,4 @@
-import { Layer, ManagedRuntime } from 'effect'
+import { type Config, ConfigProvider, Layer, ManagedRuntime } from 'effect'
 import { Browser } from '../services/browser'
 import { DocumentRenderer } from '../services/document-renderer'
 import { DocxRenderer } from '../services/docx-renderer'
@@ -6,9 +6,9 @@ import { JobWorkspace } from '../services/job-workspace'
 import { MarkdownRenderer } from '../services/markdown-renderer'
 import { PdfMerger } from '../services/pdf-merger'
 import { ZipReader } from '../services/zip-reader'
-import { RenderConfig, type RenderSettings } from './config'
+import { RenderConfig } from './config'
 
-export function makeAppLayer(config: RenderSettings) {
+export function makeAppLayer() {
   const renderers = Layer.mergeAll(
     DocxRenderer.layer,
     MarkdownRenderer.layer.pipe(Layer.provide(Browser.layer)),
@@ -18,10 +18,22 @@ export function makeAppLayer(config: RenderSettings) {
   return DocumentRenderer.layer.pipe(
     Layer.provide(renderers),
     Layer.provide(JobWorkspace.layer),
-    Layer.provide(RenderConfig.layer(config)),
+    Layer.provideMerge(RenderConfig.layer),
   )
 }
-export function makeRuntime(config: RenderSettings) {
-  return ManagedRuntime.make(makeAppLayer(config))
+export function makeRuntime() {
+  return ManagedRuntime.make(
+    makeAppLayer().pipe(
+      // Explicitly empty settings must be validated, not treated as absent.
+      Layer.provide(
+        ConfigProvider.layer(
+          ConfigProvider.fromEnv({ preserveEmptyStrings: true }),
+        ),
+      ),
+    ),
+  )
 }
-export type AppRuntime = ManagedRuntime.ManagedRuntime<DocumentRenderer, never>
+export type AppRuntime = ManagedRuntime.ManagedRuntime<
+  DocumentRenderer | RenderConfig,
+  Config.ConfigError
+>

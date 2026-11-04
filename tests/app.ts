@@ -1,11 +1,7 @@
 import { afterEach } from 'bun:test'
 import { basename, join, parse } from 'node:path'
 import { Effect, Layer, ManagedRuntime } from 'effect'
-import {
-  loadConfig,
-  RenderConfig,
-  type RenderSettings,
-} from '../src/app/config'
+import { RenderConfig, type RenderSettings } from '../src/app/config'
 import { createApp } from '../src/http/app'
 import { DocumentRenderer } from '../src/services/document-renderer'
 import { type DocxInput, DocxRenderer } from '../src/services/docx-renderer'
@@ -16,9 +12,13 @@ import {
 } from '../src/services/markdown-renderer'
 import { PdfMerger } from '../src/services/pdf-merger'
 import { ZipReader } from '../src/services/zip-reader'
+import { testConfig } from './config'
 import { createPdfBytes, writePdf } from './helpers'
 
-const runtimes: ManagedRuntime.ManagedRuntime<DocumentRenderer, never>[] = []
+const runtimes: ManagedRuntime.ManagedRuntime<
+  DocumentRenderer | RenderConfig,
+  never
+>[] = []
 afterEach(async () => {
   await Promise.all(runtimes.splice(0).map((runtime) => runtime.dispose()))
 })
@@ -31,7 +31,7 @@ export function makeTestApp(
     workspace?: JobWorkspace['Service']
   } = {},
 ) {
-  const config = options.config ?? loadConfig({})
+  const config = options.config ?? testConfig({})
   const docx = options.docx ?? {
     render: (input: DocxInput) =>
       Effect.promise(async () => {
@@ -58,9 +58,9 @@ export function makeTestApp(
         ? Layer.succeed(JobWorkspace, options.workspace)
         : JobWorkspace.layer,
     ),
-    Layer.provide(RenderConfig.layer(config)),
+    Layer.provideMerge(Layer.succeed(RenderConfig, config)),
   )
   const runtime = ManagedRuntime.make(layer)
   runtimes.push(runtime)
-  return { app: createApp(runtime, config), runtime }
+  return { app: createApp(runtime), runtime }
 }

@@ -7,10 +7,10 @@ Write clear, cohesive, maintainable code. Prefer the simplest design that fully 
 `doctopdf` is a Bun and Hono service that renders DOCX and Markdown documents, merges PDFs in manifest order, and returns the result.
 
 - `src/main.ts`: application entrypoint and shutdown signals.
-- `src/app/`: startup configuration and Effect service-layer composition.
-- `src/http/`: Hono parsing, validation, HTTP error mapping, and server drain/disposal; `createApp` accepts a managed runtime and configuration.
+- `src/app/`: the `RenderConfig` service using Effect Config and startup service-layer composition.
+- `src/http/`: Hono parsing, validation, HTTP error mapping, and server drain/disposal; `createApp` accepts a managed runtime.
 - `src/services/`: shared `DocumentRenderer` pipeline, DOCX/Markdown renderers, Chromium lifecycle, PDF merging, job workspaces, ZIP reading, and asynchronous cancellation support.
-- `src/documents/`: Zod schemas and inferred types, delimiter configuration, DOCX templating, HTML theme expansion, and filename helpers.
+- `src/documents/`: Zod schemas and inferred types, DOCX templating, HTML theme expansion, and filename helpers.
 - `src/errors.ts`: shared tagged failures and typed deadline handling.
 - `themes/`: HTML and CSS assets. `tests/`: unit, HTTP integration, and Docker end-to-end coverage.
 
@@ -31,6 +31,7 @@ Write clear, cohesive, maintainable code. Prefer the simplest design that fully 
 - Treat external input as `unknown`, validate it at the boundary with Zod, and infer request types from the schemas.
 - Prefer narrowing and explicit types over `any`, unchecked casts, non-null assertions, and suppressed diagnostics.
 - Define defaults and validation rules in one place. Keep the schemas for multipart uploads and ZIP uploads consistent when they expose the same options.
+- Parse environment settings and defaults in `RenderConfig` using Effect Config. Keep Zod for request validation; rendering helpers receive resolved delimiter pairs.
 
 ## Compatibility and configuration
 

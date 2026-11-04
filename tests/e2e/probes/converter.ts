@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert'
 import { readdir, readlink, stat } from 'node:fs/promises'
-import { Effect, Exit, Layer, ManagedRuntime } from 'effect'
-import { loadConfig, RenderConfig } from '../../../src/app/config'
+import { ConfigProvider, Effect, Exit, Layer, ManagedRuntime } from 'effect'
+import { RenderConfig } from '../../../src/app/config'
 import { DocxRenderer } from '../../../src/services/docx-renderer'
 import { JobWorkspace } from '../../../src/services/job-workspace'
 
@@ -13,7 +13,15 @@ const profilesBefore = new Set(
 const runtime = ManagedRuntime.make(
   Layer.mergeAll(DocxRenderer.layer, JobWorkspace.layer).pipe(
     Layer.provide(JobWorkspace.layer),
-    Layer.provide(RenderConfig.layer(loadConfig({ DOCX_TIMEOUT_MS: '50' }))),
+    Layer.provide(RenderConfig.layer),
+    Layer.provide(
+      ConfigProvider.layer(
+        ConfigProvider.fromEnv({
+          preserveEmptyStrings: true,
+          env: { DOCX_TIMEOUT_MS: '50' },
+        }),
+      ),
+    ),
   ),
 )
 let directory = ''

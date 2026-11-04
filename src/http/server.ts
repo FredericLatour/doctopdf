@@ -1,12 +1,13 @@
-import type { RenderSettings } from '../app/config'
+import { RenderConfig, type RenderSettings } from '../app/config'
 import type { AppRuntime } from '../app/runtime'
 import { createApp } from './app'
 
-export async function startServer(runtime: AppRuntime, config: RenderSettings) {
-  await runtime.context()
+export async function startServer(runtime: AppRuntime) {
+  let config: RenderSettings
   let server: ReturnType<typeof Bun.serve>
   try {
-    const app = createApp(runtime, config)
+    config = await runtime.runPromise(RenderConfig)
+    const app = createApp(runtime)
     // Rendering can legitimately produce no bytes for longer than Bun's default
     // idle timeout. Body/render deadlines and shutdown own the time budgets.
     server = Bun.serve({ port: config.port, fetch: app.fetch, idleTimeout: 0 })
@@ -36,5 +37,5 @@ export async function startServer(runtime: AppRuntime, config: RenderSettings) {
     })()
     return stopping
   }
-  return { server, shutdown }
+  return { server, shutdown, config }
 }

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, spyOn, test } from 'bun:test'
 import * as fs from 'node:fs/promises'
 import { Effect, Exit, Layer, ManagedRuntime } from 'effect'
-import { loadConfig, RenderConfig } from '../../src/app/config'
+import { RenderConfig } from '../../src/app/config'
 import { ConversionError, deadline } from '../../src/errors'
 import {
   Browser,
@@ -11,6 +11,7 @@ import {
 import { cancellable } from '../../src/services/cancellation'
 import { runConversion } from '../../src/services/docx-renderer'
 import { JobWorkspace } from '../../src/services/job-workspace'
+import { testConfig } from '../config'
 
 const browsers: ManagedRuntime.ManagedRuntime<Browser, never>[] = []
 afterEach(async () => {
@@ -22,7 +23,7 @@ function browserRuntime(
 ) {
   const runtime = ManagedRuntime.make(
     makeBrowserLayer(launch).pipe(
-      Layer.provide(RenderConfig.layer(loadConfig(environment))),
+      Layer.provide(Layer.succeed(RenderConfig, testConfig(environment))),
     ),
   )
   browsers.push(runtime)

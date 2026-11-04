@@ -1,7 +1,6 @@
 import { Context, Effect, Layer } from 'effect'
 import MarkdownIt from 'markdown-it'
 import { RenderConfig } from '../app/config'
-import { DEFAULT_DELIMITERS } from '../documents/delimiters'
 import type { Delimiters } from '../documents/schemas'
 import { applyTemplate, loadTheme } from '../documents/theme'
 import { ConversionError, InvalidInput, type RenderTimeout } from '../errors'
@@ -16,7 +15,7 @@ const markdown = new MarkdownIt({
 markdown.linkify.set({ fuzzyLink: true })
 
 export interface MarkdownTemplateOptions {
-  delimiters?: Delimiters
+  delimiters: Delimiters
 }
 export interface MarkdownInput {
   text: string
@@ -71,15 +70,11 @@ export async function renderMarkdownToHtml(
   markdownInput: string,
   variables: Record<string, unknown>,
   theme: string,
-  options: MarkdownTemplateOptions = {},
+  options: MarkdownTemplateOptions,
 ): Promise<string> {
   const { template, css } = await loadTheme(theme)
   const expanded = normalizeMarkdown(
-    interpolateMarkdown(
-      markdownInput,
-      variables,
-      options.delimiters ?? DEFAULT_DELIMITERS.markdown,
-    ),
+    interpolateMarkdown(markdownInput, variables, options.delimiters),
   )
   return applyTemplate(
     template,
