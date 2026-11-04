@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert'
 import { readdir, readlink, stat } from 'node:fs/promises'
 import { ConfigProvider, Effect, Exit, Layer, ManagedRuntime } from 'effect'
-import { RenderConfig } from '../../../src/app/config'
+import { RenderConfig } from '../../../src/services/config'
 import { DocxRenderer } from '../../../src/services/docx-renderer'
 import { JobWorkspace } from '../../../src/services/job-workspace'
 

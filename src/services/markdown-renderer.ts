@@ -1,10 +1,10 @@
 import { Context, Effect, Layer } from 'effect'
 import MarkdownIt from 'markdown-it'
-import { RenderConfig } from '../app/config'
 import type { Delimiters } from '../documents/schemas'
 import { applyTemplate, loadTheme } from '../documents/theme'
 import { ConversionError, InvalidInput, type RenderTimeout } from '../errors'
 import { Browser } from './browser'
+import { RenderConfig } from './config'
 
 const markdown = new MarkdownIt({
   html: true,

@@ -1,13 +1,13 @@
 import { Buffer } from 'node:buffer'
 import { Cause, type Config, Effect, Exit } from 'effect'
 import { type Context, Hono } from 'hono'
-import { RenderConfig } from '../app/config'
 import type { AppRuntime } from '../app/runtime'
 import {
   RenderRequestSchema,
   RenderZipRequestSchema,
 } from '../documents/schemas'
 import { deadline, InvalidInput, type RenderError } from '../errors'
+import { RenderConfig } from '../services/config'
 import {
   DocumentRenderer,
   type RenderInput,

@@ -1,8 +1,8 @@
 import { strict as assert } from 'node:assert'
 import { readdir, readlink } from 'node:fs/promises'
 import { ConfigProvider, Exit, Layer, ManagedRuntime } from 'effect'
-import { RenderConfig } from '../../../src/app/config'
 import { Browser } from '../../../src/services/browser'
+import { RenderConfig } from '../../../src/services/config'
 
 async function chromiumProcesses() {
   const processes: string[] = []

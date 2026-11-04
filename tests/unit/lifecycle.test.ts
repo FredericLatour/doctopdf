@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, spyOn, test } from 'bun:test'
 import * as fs from 'node:fs/promises'
 import { Effect, Exit, Layer, ManagedRuntime } from 'effect'
-import { RenderConfig } from '../../src/app/config'
 import { ConversionError, deadline } from '../../src/errors'
 import {
   Browser,
@@ -9,6 +8,7 @@ import {
   makeBrowserLayer,
 } from '../../src/services/browser'
 import { cancellable } from '../../src/services/cancellation'
+import { RenderConfig } from '../../src/services/config'
 import { runConversion } from '../../src/services/docx-renderer'
 import { JobWorkspace } from '../../src/services/job-workspace'
 import { testConfig } from '../config'

@@ -1,5 +1,5 @@
-import { RenderConfig, type RenderSettings } from '../app/config'
 import type { AppRuntime } from '../app/runtime'
+import { RenderConfig, type RenderSettings } from '../services/config'
 import { createApp } from './app'
 
 export async function startServer(runtime: AppRuntime) {

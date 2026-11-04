@@ -1,7 +1,7 @@
 import { Context, Effect, Layer } from 'effect'
 import { PDFDocument } from 'pdf-lib'
-import { RenderConfig } from '../app/config'
 import { ConversionError, deadline, type RenderTimeout } from '../errors'
+import { RenderConfig } from './config'
 
 export async function mergePdfFiles(paths: string[]): Promise<Uint8Array> {
   const merged = await PDFDocument.create()

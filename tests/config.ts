@@ -1,5 +1,5 @@
 import { ConfigProvider, Effect } from 'effect'
-import { RenderConfig } from '../src/app/config'
+import { RenderConfig } from '../src/services/config'
 
 // Exercise the live config layer without reading the developer's environment.
 export function testConfig(

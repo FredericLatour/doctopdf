@@ -1,7 +1,6 @@
 import { Buffer } from 'node:buffer'
 import { join } from 'node:path'
 import { Context, Effect, Layer } from 'effect'
-import { RenderConfig } from '../app/config'
 import {
   ensureDocxExtension,
   ensurePdfExtension,
@@ -9,6 +8,7 @@ import {
 } from '../documents/filenames'
 import type { DocumentDescriptor } from '../documents/schemas'
 import { InvalidInput, MissingDocument, type RenderError } from '../errors'
+import { RenderConfig } from './config'
 import { DocxRenderer } from './docx-renderer'
 import { JobWorkspace } from './job-workspace'
 import { MarkdownRenderer } from './markdown-renderer'

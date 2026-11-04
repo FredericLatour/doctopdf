@@ -4,7 +4,6 @@ import { tmpdir } from 'node:os'
 import { join, parse } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { Context, Effect, Layer, Semaphore } from 'effect'
-import { RenderConfig } from '../app/config'
 import { fillTemplate } from '../documents/docx-template'
 import type { Delimiters } from '../documents/schemas'
 import {
@@ -15,6 +14,7 @@ import {
   WorkspaceError,
 } from '../errors'
 import { cancellable } from './cancellation'
+import { RenderConfig } from './config'
 import { JobWorkspace } from './job-workspace'
 
 export interface DocxInput {

@@ -410,12 +410,12 @@ src/
 ├── main.ts                      # Entrypoint and shutdown signals
 ├── errors.ts                    # Tagged failures and deadline handling
 ├── app/
-│   ├── config.ts                # Effect configuration service and defaults
 │   └── runtime.ts               # Effect layer composition
 ├── http/
 │   ├── app.ts                   # Hono routes and HTTP error mapping
 │   └── server.ts                # Server startup and drain/disposal
 ├── services/
+│   ├── config.ts                # Effect configuration service and defaults
 │   ├── document-renderer.ts     # Shared rendering pipeline
 │   ├── docx-renderer.ts         # DOCX conversion with LibreOffice
 │   ├── markdown-renderer.ts     # Markdown rendering

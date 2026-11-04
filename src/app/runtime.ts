@@ -1,12 +1,12 @@
 import { type Config, ConfigProvider, Layer, ManagedRuntime } from 'effect'
 import { Browser } from '../services/browser'
+import { RenderConfig } from '../services/config'
 import { DocumentRenderer } from '../services/document-renderer'
 import { DocxRenderer } from '../services/docx-renderer'
 import { JobWorkspace } from '../services/job-workspace'
 import { MarkdownRenderer } from '../services/markdown-renderer'
 import { PdfMerger } from '../services/pdf-merger'
 import { ZipReader } from '../services/zip-reader'
-import { RenderConfig } from './config'
 
 export function makeAppLayer() {
   const renderers = Layer.mergeAll(

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { ConfigProvider, Effect, Exit, Layer, ManagedRuntime } from 'effect'
-import { RenderConfig } from '../../src/app/config'
+import { RenderConfig } from '../../src/services/config'
 import { testConfig } from '../config'
 
 test('validates numeric bounds while allowing disabled optional deadlines', () => {
