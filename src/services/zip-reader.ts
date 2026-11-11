@@ -22,10 +22,12 @@ export class ZipReader extends Context.Service<
       cancellable(
         (signal) => extractZipFiles(archive, wanted, signal),
         (cause) =>
-          new InvalidArchive({
-            message: 'Invalid ZIP archive or entry path',
-            cause,
-          }),
+          cause instanceof InvalidArchive
+            ? cause
+            : new InvalidArchive({
+                message: 'Invalid ZIP archive or entry path',
+                cause,
+              }),
       ),
   })
 }
@@ -38,7 +40,8 @@ export async function extractZipFiles(
   const wanted = new Set(
     wantedFiles.map((name) => {
       const normalized = normalizeZipPath(name)
-      if (!normalized) throw new Error(`Invalid file path in manifest: ${name}`)
+      if (!normalized)
+        throw new InvalidArchive({ message: 'Invalid file path in manifest' })
       return normalized
     }),
   )
@@ -54,7 +57,7 @@ export async function extractZipFiles(
       signal?.throwIfAborted()
       if (entry.fileName.endsWith('/')) continue
       const name = normalizeZipPath(entry.fileName)
-      if (!name) throw new Error(`Invalid zip entry path: ${entry.fileName}`)
+      if (!name) throw new InvalidArchive({ message: 'Invalid zip entry path' })
       if (!wanted.has(name)) continue
       active = await zip.openReadStreamPromise(entry)
       try {

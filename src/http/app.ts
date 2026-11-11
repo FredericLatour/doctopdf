@@ -1,19 +1,26 @@
 import { Buffer } from 'node:buffer'
-import { Cause, type Config, Effect, Exit } from 'effect'
+import { Cause, Effect, Exit } from 'effect'
 import { type Context, Hono } from 'hono'
-import type { AppRuntime } from '../app/runtime'
 import {
   RenderRequestSchema,
   RenderZipRequestSchema,
 } from '../documents/schemas'
-import { deadline, InvalidInput, type RenderError } from '../errors'
+import { deadline, InvalidInput, logFailure, type RenderError } from '../errors'
 import { RenderConfig } from '../services/config'
 import {
   DocumentRenderer,
   type RenderInput,
 } from '../services/document-renderer'
 
-export function createApp(runtime: AppRuntime) {
+export type HttpServices = RenderConfig | DocumentRenderer
+export interface HttpRunner {
+  runPromiseExit: <A, E>(
+    effect: Effect.Effect<A, E, HttpServices>,
+    options?: Effect.RunOptions,
+  ) => Promise<Exit.Exit<A, E>>
+}
+
+export function createApp(runtime: HttpRunner) {
   const app = new Hono()
   app.get('/healthz', (c) => c.json({ status: 'ok' }))
   for (const kind of ['multipart', 'zip'] as const) {
@@ -44,8 +51,8 @@ export function createApp(runtime: AppRuntime) {
       })
     })
   }
-  app.onError((_error, c) => {
-    console.error('Unhandled HTTP adapter defect')
+  app.onError((error, c) => {
+    logFailure('HTTP adapter failed', Cause.die(error))
     return c.json({ message: 'Unexpected server error' }, 500)
   })
   return app
@@ -167,7 +174,7 @@ function readBody(request: Request) {
 
 function failureResponse(
   c: Context,
-  cause: Cause.Cause<RenderError | Config.ConfigError>,
+  cause: Cause.Cause<RenderError>,
   requestId: string,
 ) {
   // Never print raw causes: library errors can contain uploaded document data.

@@ -1,4 +1,4 @@
-import { type Config, ConfigProvider, Layer, ManagedRuntime } from 'effect'
+import { ConfigProvider, Layer } from 'effect'
 import { Browser } from '../services/browser'
 import { RenderConfig } from '../services/config'
 import { DocumentRenderer } from '../services/document-renderer'
@@ -19,21 +19,10 @@ export function makeAppLayer() {
     Layer.provide(renderers),
     Layer.provide(JobWorkspace.layer),
     Layer.provideMerge(RenderConfig.layer),
-  )
-}
-export function makeRuntime() {
-  return ManagedRuntime.make(
-    makeAppLayer().pipe(
-      // Explicitly empty settings must be validated, not treated as absent.
-      Layer.provide(
-        ConfigProvider.layer(
-          ConfigProvider.fromEnv({ preserveEmptyStrings: true }),
-        ),
+    Layer.provide(
+      ConfigProvider.layer(
+        ConfigProvider.fromEnv({ preserveEmptyStrings: true }),
       ),
     ),
   )
 }
-export type AppRuntime = ManagedRuntime.ManagedRuntime<
-  DocumentRenderer | RenderConfig,
-  Config.ConfigError
->

@@ -172,6 +172,8 @@ Prepared for {{customerName}}
 
 Missing Markdown variables resolve to an empty string.
 
+Theme names must be a single directory name containing letters, digits, underscores, or hyphens, beginning with a letter or digit. Custom directories under `themes/` remain supported; paths and traversal sequences are rejected.
+
 ### Custom delimiters
 
 DOCX and Markdown placeholder delimiters are configurable independently. The effective pair for each document is selected in this order, with later settings taking priority:
@@ -370,7 +372,6 @@ Optional environment variables:
 | `MARKDOWN_CLOSE_TIMEOUT_MS` | `5000` | Timeout for closing Chromium cleanly. |
 | `MARKDOWN_DEBUG` | unset | Set to `1` to log Markdown rendering phases. |
 | `MARKDOWN_MAX_CHARS` | unset | Reject Markdown input longer than this value. |
-| `MERGE_TIMEOUT_MS` | `30000` | Budget for the complete merge; `0` disables it. See cancellation limitations below. |
 | `DOCX_TIMEOUT_MS` | `60000` | Positive timeout for each LibreOffice conversion after acquiring its concurrency permit. |
 | `SHUTDOWN_TIMEOUT_MS` | `10000` | Positive drain period before shutdown interrupts remaining requests. |
 
@@ -380,7 +381,7 @@ Documents render sequentially in manifest order. Across requests, Chromium rende
 
 Client disconnects interrupt their request effects. Scoped cleanup closes pages, stops conversion process groups, and removes job directories. SIGINT/SIGTERM stop intake, allow the configured drain period, then interrupt outstanding jobs and dispose shared services. Chromium starts lazily and can be relaunched after failure or cancellation.
 
-Timeouts are operation budgets, not hard wall-clock response guarantees: queued work waits for a permit, cleanup takes additional time, and local filesystem operations are awaited before deleting their paths. PDF merging and synchronous template/Markdown work cannot be preempted while JavaScript is executing; strict CPU deadlines would require worker isolation. Requests, ZIP inputs, and selected ZIP entries are still buffered in memory.
+Timeouts are operation budgets, not hard wall-clock response guarantees: queued work waits for a permit, cleanup takes additional time, and local filesystem operations are awaited before deleting their paths. PDF merging is awaited to completion before workspace cleanup and has no timeout; `MERGE_TIMEOUT_MS` has been removed and is ignored if present. Synchronous template/Markdown work also cannot be preempted while JavaScript is executing; strict CPU deadlines would require worker isolation. Requests, ZIP inputs, and selected ZIP entries are still buffered in memory.
 
 ## Error behavior
 
@@ -433,6 +434,6 @@ src/
 
 Hono owns HTTP parsing, Zod validation, and response/error mapping in [`src/http/app.ts`](src/http/app.ts). [`src/services/document-renderer.ts`](src/services/document-renderer.ts) contains the shared `DocumentRenderer` pipeline. `DocxRenderer`, `MarkdownRenderer`, `Browser`, `ZipReader`, `PdfMerger`, and `JobWorkspace` expose typed Effect methods and are assembled with explicit layers in [`src/app/runtime.ts`](src/app/runtime.ts).
 
-[`src/main.ts`](src/main.ts) starts the application; [`src/http/server.ts`](src/http/server.ts) initializes the runtime before listening and owns the server's drain/disposal lifecycle. One `ManagedRuntime` owns shared services, including `RenderConfig`. Its live layer defines environment validation and defaults, with an environment `ConfigProvider` that preserves empty values for validation. Delimiter pairs are resolved once per document from its override or the configured format defaults, then passed explicitly to template helpers. Job workspaces belong to request scopes, and foreign asynchronous adapters await cancellation cleanup before releasing their scope or concurrency permit.
+[`src/main.ts`](src/main.ts) starts the application; [`src/http/server.ts`](src/http/server.ts) acquires the Bun server after service initialization and owns the server's drain/disposal lifecycle. Effect scopes own the HTTP server, tracked request fibers, and shared services, including `RenderConfig`. `BunRuntime.runMain` handles process signals. The server finalizer drains connections, then force-closes sockets; request fibers are interrupted and awaited before dependency layers are released. A watchdog bounds process shutdown if a native adapter fails to settle. Its live layer defines environment validation and defaults, with an environment `ConfigProvider` that preserves empty values for validation. Delimiter pairs are resolved once per document from its override or the configured format defaults, then passed explicitly to template helpers. Job workspaces belong to request scopes, and foreign asynchronous adapters await cancellation cleanup before releasing their scope or concurrency permit.
 
-Tests replace services with `Layer.succeed`, keeping fast HTTP tests independent of external renderers. See [`tests/app.ts`](tests/app.ts) for test-layer composition and [`tests/config.ts`](tests/config.ts) for loading the live configuration layer with an isolated provider. Run `bun run check`, `bun run typecheck`, and `bun run test:fast`; `bun run test:e2e` additionally exercises real rendering, process/browser cancellation, HTTP disconnects, and shutdown in Docker.
+The Hono adapter accepts a typed request runner; production tracks fibers in a scoped `FiberSet`, while tests can use `ManagedRuntime`. Tests replace services with `Layer.succeed`, keeping fast HTTP tests independent of external renderers. See [`tests/app.ts`](tests/app.ts) for test-layer composition and [`tests/config.ts`](tests/config.ts) for loading the live configuration layer with an isolated provider. Run `bun run check`, `bun run typecheck`, and `bun run test:fast`; `bun run test:e2e` additionally exercises real rendering, process/browser cancellation, HTTP disconnects, and shutdown in Docker.

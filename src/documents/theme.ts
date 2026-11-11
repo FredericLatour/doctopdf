@@ -1,12 +1,15 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
+import { ThemeNameSchema } from './schemas'
+
 export interface ThemeAssets {
   template: string
   css: string
 }
 
 export async function loadTheme(theme: string): Promise<ThemeAssets> {
+  ThemeNameSchema.parse(theme)
   const themesDir = join(import.meta.dir, '..', '..', 'themes')
   const templatePath = join(themesDir, theme, 'template.html')
   const cssPath = join(themesDir, theme, 'theme.css')

@@ -1,4 +1,4 @@
-import { Data, Effect } from 'effect'
+import { type Cause, Config, Data, Effect } from 'effect'
 
 export class InvalidInput extends Data.TaggedError('InvalidInput')<{
   message: string
@@ -49,4 +49,33 @@ export function deadline<A, E, R>(
           orElse: () => Effect.fail(new RenderTimeout({ stage, timeoutMs })),
         }),
       )
+}
+
+export class ServerError extends Data.TaggedError('ServerError')<{
+  operation: 'listen' | 'drain' | 'force-stop'
+  cause: unknown
+}> {}
+
+/** Log categories only: arbitrary error messages/causes can contain document data. */
+export function logFailure(message: string, cause: Cause.Cause<unknown>) {
+  console.error(message, {
+    reasons: cause.reasons.map((reason) => {
+      if (reason._tag === 'Interrupt') return { category: 'Interrupt' }
+      const error = reason._tag === 'Fail' ? reason.error : reason.defect
+      return {
+        category: reason._tag,
+        ...(error instanceof Config.ConfigError
+          ? { message: error.message }
+          : {}),
+        type: error instanceof Error ? error.name : typeof error,
+        ...(typeof error === 'object' &&
+        error !== null &&
+        '_tag' in error &&
+        typeof error._tag === 'string'
+          ? { tag: error._tag }
+          : {}),
+        ...(error instanceof ServerError ? { operation: error.operation } : {}),
+      }
+    }),
+  })
 }

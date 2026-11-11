@@ -454,41 +454,45 @@ describe('docker e2e', () => {
     }
   }, 30000)
 
-  test('SIGTERM interrupts remaining work after the drain deadline and exits cleanly', async () => {
-    const name = `${containerName}-shutdown`
-    const shutdownPort = await getFreePort()
-    const abort = new AbortController()
-    let request: Promise<unknown> | undefined
-    try {
-      await runDocker([
-        'run',
-        '-d',
-        '--name',
-        name,
-        '-p',
-        `${shutdownPort}:3000`,
-        '-e',
-        'SHUTDOWN_TIMEOUT_MS=100',
-        '-e',
-        'MARKDOWN_CLOSE_TIMEOUT_MS=100',
-        imageTag,
-      ])
-      await waitForHttp(`http://127.0.0.1:${shutdownPort}/healthz`, 10000)
-      request = fetch(`http://127.0.0.1:${shutdownPort}/render`, {
-        method: 'POST',
-        body: stalledMarkdownForm(),
-        signal: abort.signal,
-      }).catch(() => undefined)
-      await waitForJobs(name, true)
-      await runDocker(['kill', '--signal=SIGTERM', name])
-      expect(await runDocker(['wait', name])).toBe('0')
-      await request
-    } finally {
-      abort.abort()
-      await runDocker(['rm', '-f', name])
-      await request
-    }
-  }, 30000)
+  test.each(['SIGINT', 'SIGTERM'])(
+    '%s interrupts remaining work after the drain deadline and exits cleanly',
+    async (signal) => {
+      const name = `${containerName}-shutdown`
+      const shutdownPort = await getFreePort()
+      const abort = new AbortController()
+      let request: Promise<unknown> | undefined
+      try {
+        await runDocker([
+          'run',
+          '-d',
+          '--name',
+          name,
+          '-p',
+          `${shutdownPort}:3000`,
+          '-e',
+          'SHUTDOWN_TIMEOUT_MS=100',
+          '-e',
+          'MARKDOWN_CLOSE_TIMEOUT_MS=100',
+          imageTag,
+        ])
+        await waitForHttp(`http://127.0.0.1:${shutdownPort}/healthz`, 10000)
+        request = fetch(`http://127.0.0.1:${shutdownPort}/render`, {
+          method: 'POST',
+          body: stalledMarkdownForm(),
+          signal: abort.signal,
+        }).catch(() => undefined)
+        await waitForJobs(name, true)
+        await runDocker(['kill', `--signal=${signal}`, name])
+        expect(await runDocker(['wait', name])).toBe('0')
+        await request
+      } finally {
+        abort.abort()
+        await runDocker(['rm', '-f', name])
+        await request
+      }
+    },
+    30000,
+  )
 })
 
 function stalledMarkdownForm(text = '<script>while(true){}</script>') {

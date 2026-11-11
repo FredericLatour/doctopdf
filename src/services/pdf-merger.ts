@@ -1,7 +1,6 @@
 import { Context, Effect, Layer } from 'effect'
 import { PDFDocument } from 'pdf-lib'
-import { ConversionError, deadline, type RenderTimeout } from '../errors'
-import { RenderConfig } from './config'
+import { ConversionError } from '../errors'
 
 export async function mergePdfFiles(paths: string[]): Promise<Uint8Array> {
   const merged = await PDFDocument.create()
@@ -16,26 +15,15 @@ export async function mergePdfFiles(paths: string[]): Promise<Uint8Array> {
 export class PdfMerger extends Context.Service<
   PdfMerger,
   {
-    merge: (
-      paths: string[],
-    ) => Effect.Effect<Uint8Array, ConversionError | RenderTimeout>
+    merge: (paths: string[]) => Effect.Effect<Uint8Array, ConversionError>
   }
 >()('doctopdf/PdfMerger') {
-  static layer = Layer.effect(
-    PdfMerger,
-    Effect.gen(function* () {
-      const config = yield* RenderConfig
-      return {
-        merge: (paths: string[]) =>
-          deadline(
-            Effect.tryPromise({
-              try: () => mergePdfFiles(paths),
-              catch: (cause) => new ConversionError({ stage: 'merge', cause }),
-            }).pipe(Effect.uninterruptible),
-            'merge',
-            config.mergeTimeoutMs,
-          ),
-      }
-    }),
-  )
+  static layer = Layer.succeed(PdfMerger, {
+    // pdf-lib cannot be interrupted. Await it before workspace cleanup.
+    merge: (paths: string[]) =>
+      Effect.tryPromise({
+        try: () => mergePdfFiles(paths),
+        catch: (cause) => new ConversionError({ stage: 'merge', cause }),
+      }).pipe(Effect.uninterruptible),
+  })
 }

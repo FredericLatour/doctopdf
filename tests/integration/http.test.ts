@@ -3,7 +3,13 @@ import { join, parse } from 'node:path'
 import { Effect, Exit } from 'effect'
 import PizZip from 'pizzip'
 import { fillTemplate } from '../../src/documents/docx-template'
-import { ConversionError, InvalidInput, RenderTimeout } from '../../src/errors'
+import {
+  ConversionError,
+  InvalidInput,
+  RenderTimeout,
+  TemplateError,
+  WorkspaceError,
+} from '../../src/errors'
 import { DocumentRenderer } from '../../src/services/document-renderer'
 import { renderMarkdownToHtml } from '../../src/services/markdown-renderer'
 import { makeTestApp } from '../app'
@@ -33,6 +39,22 @@ describe('http service', () => {
     { endpoint: '/render', document: { field: 'cover' } },
     { endpoint: '/render-zip', document: { file: 'cover.docx' } },
   ]) {
+    test.each(['../default', '../../etc', '/tmp', 'a\\b'])(
+      `${endpoint} rejects unsafe theme %s`,
+      async (theme) => {
+        const { app } = makeTestApp()
+        const form = new FormData()
+        form.set('manifest', JSON.stringify({ theme, documents: [document] }))
+        form.set('archive', new File([], 'bundle.zip'))
+        const response = await app.request(endpoint, {
+          method: 'POST',
+          body: form,
+        })
+        expect(response.status).toBe(400)
+        expect(JSON.parse(await response.text())[0].path).toEqual(['theme'])
+      },
+    )
+
     test(`${endpoint} returns 400 for invalid template variables`, async () => {
       const { app } = makeTestApp()
       const form = new FormData()
@@ -486,3 +508,28 @@ function markdownForm() {
   form.set('body', new File(['# Hello'], 'body.md'))
   return form
 }
+
+test.each([
+  [
+    new TemplateError({
+      message: 'Invalid DOCX template',
+      cause: new Error('private template'),
+    }),
+    400,
+  ],
+  [
+    new WorkspaceError({
+      operation: 'write document',
+      cause: new Error('private path'),
+    }),
+    500,
+  ],
+] as const)('maps renderer failure %j to HTTP %i', async (failure, status) => {
+  const { app } = makeTestApp({ docx: { render: () => Effect.fail(failure) } })
+  const form = new FormData()
+  form.set('manifest', JSON.stringify({ documents: [{ field: 'cover' }] }))
+  form.set('cover', new File(['placeholder'], 'cover.docx'))
+  const response = await app.request('/render', { method: 'POST', body: form })
+  expect(response.status).toBe(status)
+  expect(await response.text()).not.toContain('private')
+})

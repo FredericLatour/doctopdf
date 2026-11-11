@@ -6,9 +6,9 @@ Write clear, cohesive, maintainable code. Prefer the simplest design that fully 
 
 `doctopdf` is a Bun and Hono service that renders DOCX and Markdown documents, merges PDFs in manifest order, and returns the result.
 
-- `src/main.ts`: application entrypoint and shutdown signals.
+- `src/main.ts`: scoped application entrypoint using `BunRuntime.runMain` and a shutdown watchdog.
 - `src/app/`: startup service-layer composition.
-- `src/http/`: Hono parsing, validation, HTTP error mapping, and server drain/disposal; `createApp` accepts a managed runtime.
+- `src/http/`: Hono parsing, validation, HTTP error mapping, and scoped server draining and request-fiber ownership; `createApp` accepts a typed request runner.
 - `src/services/`: the `RenderConfig` service using Effect Config, shared `DocumentRenderer` pipeline, DOCX/Markdown renderers, Chromium lifecycle, PDF merging, job workspaces, ZIP reading, and asynchronous cancellation support.
 - `src/documents/`: Zod schemas and inferred types, DOCX templating, HTML theme expansion, and filename helpers.
 - `src/errors.ts`: shared tagged failures and typed deadline handling.

@@ -4,10 +4,13 @@ const nonnegative = Schema.Int.check(
   Schema.isBetween({ minimum: 0, maximum: 2_147_483_647 }),
 )
 const positive = nonnegative.check(Schema.isGreaterThan(0))
-const delimiterPair = Schema.Struct({
-  START: Schema.NonEmptyString,
-  END: Schema.NonEmptyString,
-})
+const delimiterPair = (prefix: string) => {
+  const message = `${prefix}_DELIMITER_START and ${prefix}_DELIMITER_END must both be set to nonempty strings`
+  const field = Schema.NonEmptyString.annotate({ message }).annotateKey({
+    messageMissingKey: message,
+  })
+  return Schema.Struct({ START: field, END: field })
+}
 const settings = Config.all({
   port: Config.schema(
     Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 65535 })),
@@ -40,9 +43,6 @@ const settings = Config.all({
     Config.withDefault(''),
     Config.map((value) => value || undefined),
   ),
-  mergeTimeoutMs: Config.schema(nonnegative, 'MERGE_TIMEOUT_MS').pipe(
-    Config.withDefault(30000),
-  ),
   docxTimeoutMs: Config.schema(positive, 'DOCX_TIMEOUT_MS').pipe(
     Config.withDefault(60000),
   ),
@@ -51,11 +51,14 @@ const settings = Config.all({
   ),
   delimiters: Config.all({
     // Struct validation rejects partial pairs; Config.all would default them.
-    docx: Config.schema(delimiterPair, ['DOCX', 'DELIMITER']).pipe(
+    docx: Config.schema(delimiterPair('DOCX'), ['DOCX', 'DELIMITER']).pipe(
       Config.map(({ START, END }) => ({ start: START, end: END })),
       Config.withDefault({ start: '{', end: '}' }),
     ),
-    markdown: Config.schema(delimiterPair, ['MARKDOWN', 'DELIMITER']).pipe(
+    markdown: Config.schema(delimiterPair('MARKDOWN'), [
+      'MARKDOWN',
+      'DELIMITER',
+    ]).pipe(
       Config.map(({ START, END }) => ({ start: START, end: END })),
       Config.withDefault({ start: '{{', end: '}}' }),
     ),

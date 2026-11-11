@@ -11,7 +11,6 @@ test('validates numeric bounds while allowing disabled optional deadlines', () =
   for (const key of [
     'FORMDATA_TIMEOUT_MS',
     'DOCX_TIMEOUT_MS',
-    'MERGE_TIMEOUT_MS',
     'MARKDOWN_MAX_CHARS',
   ]) {
     expect(() => testConfig({ [key]: 'not-a-number' })).toThrow()
@@ -25,7 +24,7 @@ test('validates numeric bounds while allowing disabled optional deadlines', () =
   for (const port of ['-1', '65536', '1.5']) {
     expect(() => testConfig({ PORT: port })).toThrow()
   }
-  expect(() => testConfig({ MERGE_TIMEOUT_MS: '2147483648' })).toThrow()
+  expect(() => testConfig({ FORMDATA_TIMEOUT_MS: '2147483648' })).toThrow()
   expect(() => testConfig({ MARKDOWN_CLOSE_TIMEOUT_MS: '0' })).toThrow()
 })
 
@@ -132,7 +131,7 @@ describe('delimiter configuration', () => {
           [`${prefix}_DELIMITER_START`]: pair.start,
           [`${prefix}_DELIMITER_END`]: pair.end,
         }),
-      ).toThrow(prefix)
+      ).toThrow(`${prefix}_DELIMITER_START and ${prefix}_DELIMITER_END`)
     })
   }
 })
