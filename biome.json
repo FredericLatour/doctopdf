@@ -4,6 +4,7 @@
     "includes": [
       "**",
       "!!.archify",
+      "!!docs/architecture",
       "!tests/fixtures/*.docx",
       "!themes/**/template.html"
     ]

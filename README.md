@@ -340,11 +340,22 @@ bun run fixtures:generate
 
 ## Docker
 
+Release images are published to [`fredericlatour/doctopdf`](https://hub.docker.com/r/fredericlatour/doctopdf) for `linux/amd64`. Once the first image release is published:
+
+```bash
+docker run -d --name doctopdf --restart unless-stopped \
+  -p 127.0.0.1:3000:3000 fredericlatour/doctopdf:latest
+```
+
+Use a specific release tag instead of `latest` for predictable upgrades. Stable releases update `latest`; prereleases do not. LibreOffice, Chromium, fonts, and built-in themes are included. Release publishing setup is documented in [RELEASING.md](RELEASING.md).
+
+
 The provided [`Dockerfile`](/Users/frederic/devel/enesys/doctopdf/Dockerfile) installs Bun, LibreOffice, Chromium, Poppler utilities, and baseline fonts.
 
 Build and run:
 
 ```bash
+# Build locally
 docker build -t doctopdf .
 docker run --rm -p 3000:3000 -e PORT=3000 doctopdf
 ```
