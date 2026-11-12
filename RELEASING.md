@@ -14,9 +14,11 @@ git push origin v1.1.0
 The CI workflow checks formatting, lint, types, and unit/integration tests on pull requests and pushes to `main`. Pull requests also build and test the amd64 image without signing in to Docker Hub or publishing. Version tags must match `package.json`. After the fast checks pass, the workflow builds a `linux/amd64` image, runs the Docker end-to-end suite against that exact image, and pushes it to [Docker Hub](https://hub.docker.com/r/fredericlatour/doctopdf). Only then does it publish a GitHub release with [automatically generated notes](https://docs.github.com/en/repositories/releasing-projects-on-github/automatically-generated-release-notes) and source archives. The GitHub release uses the built-in `GITHUB_TOKEN`. Docker publishing requires these repository Actions settings:
 
 - Variable `DOCKERHUB_USERNAME`: `fredericlatour`.
-- Secret `DOCKERHUB_TOKEN`: a Docker Hub personal access token with repository read/write permission.
+- Secret `DOCKERHUB_TOKEN`: a Docker Hub personal access token with Read, Write & Delete permissions. Image publishing needs read/write; the Docker Hub overview sync action additionally requires delete scope.
 
 The image repository is `fredericlatour/doctopdf`. A tag such as `v2.0.0` publishes `fredericlatour/doctopdf:2.0.0` and updates `latest`. A prerelease such as `v2.0.0-rc.1` publishes only `2.0.0-rc.1`. PRs and ordinary pushes never publish images. Releases are serialized to avoid simultaneous updates of `latest`.
+
+After publishing a stable image and GitHub release, the workflow synchronizes [README.docker.md](README.docker.md) to the Docker Hub repository overview. Edit that file alongside user-facing image changes. Prereleases skip synchronization so the overview continues to describe `latest`. The short description remains managed on Docker Hub. Overview synchronization failures fail the workflow, but the image and GitHub release have already been published; fix the credentials or permissions and rerun the workflow. The required token scope is documented by the [sync action](https://github.com/peter-evans/dockerhub-description#action-inputs).
 
 Publish stable releases in version order: `latest` points to the most recently published stable workflow run, not a computed maximum version. Rerunning an older stable release also updates `latest`, so avoid doing so after newer stable releases have shipped.
 

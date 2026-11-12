@@ -124,3 +124,12 @@ jobs:
           gh release create "$RELEASE_TAG" --verify-tag --generate-notes \
             --notes-file "$RUNNER_TEMP/docker-release-notes.md" \
             --title "$RELEASE_TAG" "${flags[@]}"
+      # The overview describes latest; prereleases must not replace it.
+      - name: Sync Docker Hub overview
+        if: github.event_name == 'push' && !contains(steps.version.outputs.value, '-')
+        uses: peter-evans/dockerhub-description@1b9a80c056b620d92cedb9d9b5a223409c68ddfa # v5
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ env.DOCKERHUB_IMAGE }}
+          readme-filepath: README.docker.md
