@@ -19,7 +19,7 @@
     "fixtures:generate": "bun run tests/fixtures/generate-fixtures.ts"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.6.4",
+    "@biomejs/biome": "^2.6.7",
     "@types/bun": "^1.4.4",
     "@types/node": "^26.6.6",
     "@types/yauzl": "^3.4.0"
@@ -28,14 +28,14 @@
     "typescript": "^7.0.2"
   },
   "dependencies": {
-    "@effect/platform-bun": "4.1.2",
+    "@effect/platform-bun": "4.1.4",
     "docxtemplater": "^3.71.1",
-    "effect": "4.1.2",
-    "hono": "^4.13.16",
+    "effect": "4.1.4",
+    "hono": "^4.13.18",
     "markdown-it": "^15.0.3",
     "pdf-lib": "^1.17.1",
     "pizzip": "^3.3.0",
-    "playwright-core": "^1.64.1",
+    "playwright-core": "^1.65.0",
     "yauzl": "^3.4.0",
     "zod": "^4.6.7"
   }
