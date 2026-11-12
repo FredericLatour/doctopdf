@@ -29,9 +29,11 @@ async function runDocker(args: string[]) {
     stderr: 'pipe',
   })
 
-  const exitCode = await process.exited
-  const stdout = await new Response(process.stdout).text()
-  const stderr = await new Response(process.stderr).text()
+  const [exitCode, stdout, stderr] = await Promise.all([
+    process.exited,
+    new Response(process.stdout).text(),
+    new Response(process.stderr).text(),
+  ])
 
   if (exitCode !== 0) {
     throw new Error(`docker ${args.join(' ')} failed:\n${stderr || stdout}`)
@@ -387,11 +389,135 @@ describe('docker e2e', () => {
     }
   }, 120000)
 
-  test('incomplete environment delimiters stop the service at startup', async () => {
-    await expect(
-      runDocker(['run', '--rm', '-e', 'DOCX_DELIMITER_START=[[', imageTag]),
-    ).rejects.toThrow(
-      'DOCX_DELIMITER_START and DOCX_DELIMITER_END must both be set to nonempty strings',
-    )
-  }, 120000)
+  test.each([
+    ['incomplete', ['DOCX_DELIMITER_START=[[']],
+    ['empty', ['DOCX_DELIMITER_START=', 'DOCX_DELIMITER_END=']],
+  ] as const)(
+    '%s environment delimiters stop the service at startup',
+    async (_name, environment) => {
+      await expect(
+        runDocker([
+          'run',
+          '--rm',
+          ...environment.flatMap((value) => ['-e', value]),
+          imageTag,
+        ]),
+      ).rejects.toThrow('DELIMITER')
+    },
+    120000,
+  )
+  test('real Chromium cancels stalled pages, recovers, and closes when idle', async () => {
+    const script = (
+      await Bun.file(join(repoRoot, 'tests/e2e/probes/browser.ts')).text()
+    ).replaceAll('../../../src/', './src/')
+    expect(
+      await runDocker(['exec', containerName, 'bun', '--eval', script]),
+    ).toContain('verified')
+  }, 30000)
+
+  test('real LibreOffice timeout cleans up the process group and workspace', async () => {
+    await runDocker([
+      'cp',
+      join(repoRoot, 'tests/fixtures/simple-template.docx'),
+      `${containerName}:/tmp/converter-input.docx`,
+    ])
+    const script = (
+      await Bun.file(join(repoRoot, 'tests/e2e/probes/converter.ts')).text()
+    ).replaceAll('../../../src/', './src/')
+    expect(
+      await runDocker(['exec', containerName, 'bun', '--eval', script]),
+    ).toContain('verified')
+  }, 15000)
+
+  test('HTTP disconnect stops rendering and removes its workspace', async () => {
+    const abort = new AbortController()
+    const task = fetch(`http://127.0.0.1:${port}/render`, {
+      method: 'POST',
+      body: stalledMarkdownForm(),
+      signal: abort.signal,
+    }).catch(() => undefined)
+    try {
+      await waitForJobs(containerName, true)
+      await Bun.sleep(200)
+      abort.abort()
+      await task
+      await waitForJobs(containerName, false)
+      const response = await fetch(`http://127.0.0.1:${port}/render`, {
+        method: 'POST',
+        body: stalledMarkdownForm('# Recovery'),
+      })
+      expect(response.status).toBe(200)
+      await response.arrayBuffer()
+    } finally {
+      abort.abort()
+      await task
+    }
+  }, 30000)
+
+  test.each(['SIGINT', 'SIGTERM'])(
+    '%s interrupts remaining work after the drain deadline and exits cleanly',
+    async (signal) => {
+      const name = `${containerName}-shutdown`
+      const shutdownPort = await getFreePort()
+      const abort = new AbortController()
+      let request: Promise<unknown> | undefined
+      try {
+        await runDocker([
+          'run',
+          '-d',
+          '--name',
+          name,
+          '-p',
+          `${shutdownPort}:3000`,
+          '-e',
+          'SHUTDOWN_TIMEOUT_MS=100',
+          '-e',
+          'MARKDOWN_CLOSE_TIMEOUT_MS=100',
+          imageTag,
+        ])
+        await waitForHttp(`http://127.0.0.1:${shutdownPort}/healthz`, 10000)
+        request = fetch(`http://127.0.0.1:${shutdownPort}/render`, {
+          method: 'POST',
+          body: stalledMarkdownForm(),
+          signal: abort.signal,
+        }).catch(() => undefined)
+        await waitForJobs(name, true)
+        await runDocker(['kill', `--signal=${signal}`, name])
+        expect(await runDocker(['wait', name])).toBe('0')
+        await request
+      } finally {
+        abort.abort()
+        await runDocker(['rm', '-f', name])
+        await request
+      }
+    },
+    30000,
+  )
 })
+
+function stalledMarkdownForm(text = '<script>while(true){}</script>') {
+  const form = new FormData()
+  form.set(
+    'manifest',
+    JSON.stringify({ documents: [{ field: 'body', type: 'md' }] }),
+  )
+  form.set('body', new File([text], 'body.md'))
+  return form
+}
+
+async function waitForJobs(container: string, present: boolean) {
+  for (let attempt = 0; attempt < 80; attempt++) {
+    const entries = await runDocker([
+      'exec',
+      container,
+      'bun',
+      '--eval',
+      "import {readdir} from 'node:fs/promises'; console.log((await readdir('/tmp', {withFileTypes:true})).filter(e=>e.isDirectory() && e.name.startsWith('doctopdf-') && !e.name.startsWith('doctopdf-lo-profile-')).length)",
+    ])
+    if (Number(entries) > 0 === present) return
+    await Bun.sleep(100)
+  }
+  throw new Error(
+    `Job directories did not become ${present ? 'present' : 'empty'}`,
+  )
+}

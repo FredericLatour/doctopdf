@@ -1,7 +1,12 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.6.4/schema.json",
   "files": {
-    "includes": ["**", "!tests/fixtures/*.docx", "!themes/**/template.html"]
+    "includes": [
+      "**",
+      "!!.archify",
+      "!tests/fixtures/*.docx",
+      "!themes/**/template.html"
+    ]
   },
   "formatter": {
     "enabled": true,

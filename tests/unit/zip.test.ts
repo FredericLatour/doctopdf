@@ -1,7 +1,10 @@
 import { describe, expect, test } from 'bun:test'
 import { join } from 'node:path'
 
-import { extractZipFiles, normalizeZipPath } from '../../src/zip'
+import {
+  extractZipFiles,
+  normalizeZipPath,
+} from '../../src/services/zip-reader'
 import {
   cleanupDir,
   createZipFromFiles,

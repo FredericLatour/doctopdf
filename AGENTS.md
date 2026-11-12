@@ -6,17 +6,18 @@ Write clear, cohesive, maintainable code. Prefer the simplest design that fully 
 
 `doctopdf` is a Bun and Hono service that renders DOCX and Markdown documents, merges PDFs in manifest order, and returns the result.
 
-- `src/index.ts`: HTTP application, request handling, and pipeline orchestration; `createApp` accepts dependencies for integration tests.
-- `src/types.ts`: Zod request schemas and their inferred TypeScript types.
-- `src/template.ts` and `src/libreoffice.ts`: DOCX templating and conversion.
-- `src/markdown.ts` and `src/theme.ts`: Markdown rendering, Chromium lifecycle, and HTML theme expansion.
-- `src/pdf.ts`, `src/temp.ts`, `src/zip.ts`, and `src/utils.ts`: PDF merging, job directories, archive handling, and filename helpers.
+- `src/main.ts`: scoped application entrypoint using `BunRuntime.runMain` and a shutdown watchdog.
+- `src/app/`: startup service-layer composition.
+- `src/http/`: Hono parsing, validation, HTTP error mapping, and scoped server draining and request-fiber ownership; `createApp` accepts a typed request runner.
+- `src/services/`: the `RenderConfig` service using Effect Config, shared `DocumentRenderer` pipeline, DOCX/Markdown renderers, Chromium lifecycle, PDF merging, job workspaces, ZIP reading, and asynchronous cancellation support.
+- `src/documents/`: Zod schemas and inferred types, DOCX templating, HTML theme expansion, and filename helpers.
+- `src/errors.ts`: shared tagged failures and typed deadline handling.
 - `themes/`: HTML and CSS assets. `tests/`: unit, HTTP integration, and Docker end-to-end coverage.
 
 ## Code design
 
 - Keep functions and modules focused on one responsibility. Use names that explain the domain and purpose.
-- Keep HTTP handlers focused on parsing, validation, orchestration, and responses. Put reusable rendering and file-processing behavior in domain modules that do not depend on Hono.
+- Keep HTTP handlers focused on parsing, validation, and responses. Domain services return typed Effects and do not depend on Hono; compose services with explicit layers.
 - Share behavior used by both upload endpoints through focused helpers. Keep format-specific behavior close to its renderer.
 - Introduce abstractions when they simplify an actual use case. Avoid speculative frameworks, generic factories, and unnecessary class hierarchies.
 - Prefer explicit inputs and typed options objects as configuration grows. Resolve configuration at a clear boundary and pass the effective options to the code that needs them.
@@ -30,6 +31,7 @@ Write clear, cohesive, maintainable code. Prefer the simplest design that fully 
 - Treat external input as `unknown`, validate it at the boundary with Zod, and infer request types from the schemas.
 - Prefer narrowing and explicit types over `any`, unchecked casts, non-null assertions, and suppressed diagnostics.
 - Define defaults and validation rules in one place. Keep the schemas for multipart uploads and ZIP uploads consistent when they expose the same options.
+- Parse environment settings and defaults in `RenderConfig` using Effect Config. Keep Zod for request validation; rendering helpers receive resolved delimiter pairs.
 
 ## Compatibility and configuration
 
@@ -59,7 +61,7 @@ bun run test:fast
 ```
 
 - Add focused tests for new behavior and regressions. Assert observable outcomes, including relevant error paths, rather than private implementation details.
-- Keep unit and HTTP integration tests independent of LibreOffice and Chromium. Use the existing dependency injection and test helpers.
+- Keep unit and HTTP integration tests independent of LibreOffice and Chromium. Substitute service layers using `tests/app.ts`; dispose test runtimes.
 - Run `bun run test:e2e` when changes affect actual rendering, PDF merging, external conversion tools, or the Docker image. It builds and runs Docker containers.
 - Edit DOCX fixture source XML under `tests/fixtures/docx-src/`, then regenerate with `bun run fixtures:generate`.
 - For documentation-only changes, review accuracy and the diff; runtime tests are unnecessary unless executable behavior changes.

@@ -4,7 +4,7 @@ import {
   ensureDocxExtension,
   ensurePdfExtension,
   sanitizeFilename,
-} from '../../src/utils'
+} from '../../src/documents/filenames'
 
 describe('utils', () => {
   test('sanitizeFilename keeps a conservative character set', () => {

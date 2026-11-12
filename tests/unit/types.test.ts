@@ -1,6 +1,9 @@
 import { describe, expect, test } from 'bun:test'
 
-import { RenderRequestSchema, RenderZipRequestSchema } from '../../src/types'
+import {
+  RenderRequestSchema,
+  RenderZipRequestSchema,
+} from '../../src/documents/schemas'
 
 for (const { name, schema, document, reference, referenceError } of [
   {

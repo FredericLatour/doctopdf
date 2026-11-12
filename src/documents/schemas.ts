@@ -5,6 +5,13 @@ export const DelimitersSchema = z.object({
   end: z.string().min(1, { error: 'Closing delimiter must not be empty' }),
 })
 
+export const ThemeNameSchema = z
+  .string()
+  .regex(
+    /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/,
+    'Theme must be a directory name containing only letters, digits, underscores, or hyphens',
+  )
+
 const documentOptions = {
   filename: z.string().optional(),
   type: z.enum(['docx', 'markdown', 'md']).default('docx'),
@@ -20,7 +27,7 @@ export const DocumentDescriptorSchema = z.object({
 
 export const RenderRequestSchema = z.object({
   variables: z.record(z.string(), z.unknown()).default({}),
-  theme: z.string().default('default'),
+  theme: ThemeNameSchema.default('default'),
   outputName: z.string().optional(),
   documents: z
     .array(DocumentDescriptorSchema)
@@ -34,7 +41,7 @@ export const ZipDocumentDescriptorSchema = z.object({
 
 export const RenderZipRequestSchema = z.object({
   variables: z.record(z.string(), z.unknown()).default({}),
-  theme: z.string().default('default'),
+  theme: ThemeNameSchema.default('default'),
   outputName: z.string().optional(),
   documents: z
     .array(ZipDocumentDescriptorSchema)
