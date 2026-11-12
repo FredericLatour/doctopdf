@@ -3,7 +3,7 @@
   "diagram_type": "architecture",
   "meta": {
     "title": "doctopdf — DOCX/Markdown to merged PDF service",
-    "output": ".archify/architecture-doctopdf-20261111-202336/doctopdf-architecture.html",
+    "output": "docs/architecture/doctopdf-architecture.html",
     "quality_profile": "showcase",
     "repository": {
       "url": "https://github.com/FredericLatour/doctopdf.git",

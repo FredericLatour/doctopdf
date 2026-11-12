@@ -404,6 +404,12 @@ These classifications intentionally differ from the previous implementation: Chr
 
 ## Application architecture
 
+![doctopdf architecture diagram](docs/architecture/doctopdf-architecture.svg)
+
+The interactive version of this diagram lives at
+[`docs/architecture/doctopdf-architecture.html`](docs/architecture/doctopdf-architecture.html),
+and `docs/architecture/doctopdf-architecture.json` is its editable source.
+
 The source folders separate application setup, HTTP handling, Effect services, and document helpers:
 
 ```text
