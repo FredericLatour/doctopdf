@@ -1,6 +1,14 @@
 # doctopdf
 
-`doctopdf` is a Bun + Hono microservice that renders multiple source documents into a single merged PDF.
+**Turn a batch of DOCX and Markdown documents into a single merged PDF — templated, themed, and ordered — with one HTTP request.**
+
+*A Bun + Hono service with an Effect-based pipeline: DOCX templating via docxtemplater and LibreOffice, Markdown theming and rendering via Chromium, deterministic page merging via pdf-lib.*
+
+![doctopdf architecture diagram](docs/architecture/doctopdf-architecture.svg)
+
+The interactive version of this diagram lives at
+[`docs/architecture/doctopdf-architecture.html`](docs/architecture/doctopdf-architecture.html),
+and `docs/architecture/doctopdf-architecture.json` is its editable source.
 
 It supports two input types:
 
@@ -404,12 +412,6 @@ These classifications intentionally differ from the previous implementation: Chr
 
 ## Application architecture
 
-![doctopdf architecture diagram](docs/architecture/doctopdf-architecture.svg)
-
-The interactive version of this diagram lives at
-[`docs/architecture/doctopdf-architecture.html`](docs/architecture/doctopdf-architecture.html),
-and `docs/architecture/doctopdf-architecture.json` is its editable source.
-
 The source folders separate application setup, HTTP handling, Effect services, and document helpers:
 
 ```text
@@ -438,8 +440,24 @@ src/
     └── filenames.ts
 ```
 
-Hono owns HTTP parsing, Zod validation, and response/error mapping in [`src/http/app.ts`](src/http/app.ts). [`src/services/document-renderer.ts`](src/services/document-renderer.ts) contains the shared `DocumentRenderer` pipeline. `DocxRenderer`, `MarkdownRenderer`, `Browser`, `ZipReader`, `PdfMerger`, and `JobWorkspace` expose typed Effect methods and are assembled with explicit layers in [`src/app/runtime.ts`](src/app/runtime.ts).
+### Service layer
 
-[`src/main.ts`](src/main.ts) starts the application; [`src/http/server.ts`](src/http/server.ts) acquires the Bun server after service initialization and owns the server's drain/disposal lifecycle. Effect scopes own the HTTP server, tracked request fibers, and shared services, including `RenderConfig`. `BunRuntime.runMain` handles process signals. The server finalizer drains connections, then force-closes sockets; request fibers are interrupted and awaited before dependency layers are released. A watchdog bounds process shutdown if a native adapter fails to settle. Its live layer defines environment validation and defaults, with an environment `ConfigProvider` that preserves empty values for validation. Delimiter pairs are resolved once per document from its override or the configured format defaults, then passed explicitly to template helpers. Job workspaces belong to request scopes, and foreign asynchronous adapters await cancellation cleanup before releasing their scope or concurrency permit.
+- **HTTP adapter** — [`src/http/app.ts`](src/http/app.ts) owns HTTP parsing, Zod validation, and response/error mapping. Hono receives a typed request runner rather than touching services directly.
+- **Rendering pipeline** — [`src/services/document-renderer.ts`](src/services/document-renderer.ts) contains the shared `DocumentRenderer` pipeline.
+- **Typed services** — `DocxRenderer`, `MarkdownRenderer`, `Browser`, `ZipReader`, `PdfMerger`, and `JobWorkspace` expose typed Effect methods and are assembled with explicit layers in [`src/app/runtime.ts`](src/app/runtime.ts).
 
-The Hono adapter accepts a typed request runner; production tracks fibers in a scoped `FiberSet`, while tests can use `ManagedRuntime`. Tests replace services with `Layer.succeed`, keeping fast HTTP tests independent of external renderers. See [`tests/app.ts`](tests/app.ts) for test-layer composition and [`tests/config.ts`](tests/config.ts) for loading the live configuration layer with an isolated provider. Run `bun run check`, `bun run typecheck`, and `bun run test:fast`; `bun run test:e2e` additionally exercises real rendering, process/browser cancellation, HTTP disconnects, and shutdown in Docker.
+### Runtime and lifecycle
+
+- **Startup and signals** — [`src/main.ts`](src/main.ts) starts the application; `BunRuntime.runMain` handles process signals.
+- **Server ownership** — [`src/http/server.ts`](src/http/server.ts) acquires the Bun server after service initialization and owns the drain/disposal lifecycle: the server finalizer drains connections, then force-closes sockets, and request fibers are interrupted and awaited before dependency layers are released.
+- **Scoped lifetime** — Effect scopes own the HTTP server, tracked request fibers, and shared services, including `RenderConfig`.
+- **Shutdown watchdog** — a watchdog bounds process shutdown if a native adapter fails to settle.
+- **Configuration** — the `RenderConfig` live layer defines environment validation and defaults, with an environment `ConfigProvider` that preserves empty values for validation.
+- **Delimiters** — resolved once per document from its override or the configured format defaults, then passed explicitly to template helpers.
+- **Job workspaces** — belong to request scopes; foreign asynchronous adapters await cancellation cleanup before releasing their scope or concurrency permit.
+
+### Test composition
+
+- The Hono adapter accepts a typed request runner: production tracks fibers in a scoped `FiberSet`, while tests can use `ManagedRuntime`.
+- Tests replace services with `Layer.succeed`, keeping fast HTTP tests independent of external renderers. See [`tests/app.ts`](tests/app.ts) for test-layer composition and [`tests/config.ts`](tests/config.ts) for loading the live configuration layer with an isolated provider.
+- Run `bun run check`, `bun run typecheck`, and `bun run test:fast`; `bun run test:e2e` additionally exercises real rendering, process/browser cancellation, HTTP disconnects, and shutdown in Docker.
