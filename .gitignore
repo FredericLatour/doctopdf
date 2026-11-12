@@ -34,3 +34,6 @@ data
 
 # Finder (MacOS) folder config
 .DS_Store
+
+# Archify working artifacts (diagram source + exports live in docs/architecture)
+.archify

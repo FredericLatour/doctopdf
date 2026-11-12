@@ -15,7 +15,8 @@ import {
   waitForHttp,
 } from '../helpers'
 
-const imageTag = `doctopdf-test:${Date.now()}`
+const suppliedImage = process.env.DOCTOPDF_E2E_IMAGE
+const imageTag = suppliedImage || `doctopdf-test:${Date.now()}`
 const containerName = `doctopdf-e2e-${Date.now()}`
 
 const port = Number(process.env.DOCTOPDF_E2E_PORT ?? 38080)
@@ -66,7 +67,7 @@ describe('docker e2e', () => {
   beforeAll(async () => {
     tempDir = await mkdtemp('/tmp/doctopdf-e2e-')
 
-    await runDocker(['build', '-t', imageTag, '.'])
+    if (!suppliedImage) await runDocker(['build', '-t', imageTag, '.'])
     await runDocker([
       'run',
       '--detach',
